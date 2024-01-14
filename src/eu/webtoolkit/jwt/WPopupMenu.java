@@ -86,6 +86,8 @@ import org.slf4j.LoggerFactory;
  *
  * <p><strong>WPopupMenu example (polished)</strong> </div>
  *
+ * <p>
+ *
  * @see WMenuItem
  */
 public class WPopupMenu extends WMenu {
@@ -144,7 +146,7 @@ public class WPopupMenu extends WMenu {
   public void remove() {
     if (this.button_ != null) {
       WPushButton b = ObjectUtils.cast(this.button_, WPushButton.class);
-      if (b != null) {
+      if (b != null && b.getMenu() == this) {
         b.setMenu((WPopupMenu) null);
       }
     }
@@ -167,7 +169,7 @@ public class WPopupMenu extends WMenu {
     this.setOffsets(new WLength(42), EnumSet.of(Side.Left, Side.Top));
     this.setOffsets(new WLength(-10000), EnumSet.of(Side.Left, Side.Top));
     this.doJavaScript(
-        "Wt4_10_0.positionXY('"
+        "Wt4_10_3.positionXY('"
             + this.getId()
             + "',"
             + String.valueOf(p.getX())
@@ -417,7 +419,7 @@ public class WPopupMenu extends WMenu {
 
   String renderRemoveJs(boolean recursive) {
     String result = super.renderRemoveJs(true);
-    result += "Wt4_10_0.remove('" + this.getId() + "');";
+    result += "Wt4_10_3.remove('" + this.getId() + "');";
     return result;
   }
 
@@ -496,7 +498,7 @@ public class WPopupMenu extends WMenu {
     if (!this.cancel_.isConnected()) {
       app.loadJavaScript("js/WPopupMenu.js", wtjs1());
       StringBuilder s = new StringBuilder();
-      s.append("new Wt4_10_0.WPopupMenu(")
+      s.append("new Wt4_10_3.WPopupMenu(")
           .append(app.getJavaScriptClass())
           .append(',')
           .append(this.getJsRef())
