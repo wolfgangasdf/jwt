@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -25,7 +27,9 @@ public enum TextDecoration {
   /** LineThrough. */
   LineThrough,
   /** Blink. */
-  Blink;
+  Blink,
+  /** None. */
+  None;
 
   /** Returns the numerical representation of this enum. */
   public int getValue() {

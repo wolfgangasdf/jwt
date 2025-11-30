@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -29,6 +31,11 @@ import org.slf4j.LoggerFactory;
  * stack. The contents stack may contain other items, and could be shared with other {@link WMenu}
  * instances.
  *
+ * <p>When using nested menus, you can use the currentWidgetChanged() signal to react to the change
+ * of widget selected while knowing what widget was selected as the {@link WMenu#itemSelected()
+ * itemSelected()} signal from the sub-menu is only emited when the widget selected by the submenu
+ * is changed.
+ *
  * <p>When used without a contents stack, you can react to menu item selection using the {@link
  * WMenu#itemSelected() itemSelected()} signal, to implement some custom handling of item selection.
  *
@@ -46,6 +53,17 @@ import org.slf4j.LoggerFactory;
  * menu.addItem("Download", new WText("Not yet available"));
  * menu.addItem("Demo", new DemoWidget());
  * menu.addItem(new WMenuItem("Demo2", new DemoWidget()));
+ *
+ * // bind the function to call when a new item is selected
+ * contents.currentWidgetChanged().connect((newSelection) . {
+ * if (newSelection instanceof Wt.WText){
+ * logger.info(new StringWriter().append("Text selected: ").append((WText)newSelection).text());
+ * }
+ * else if (newSelection instanceof DemoWidget){
+ * logger.info(new StringWriter().append("Testing a demo");
+ * }
+ * }
+ * );
  *
  * }</pre>
  *
@@ -405,6 +423,7 @@ public class WMenu extends WCompositeWidget {
       if (contentsPtr != null) {
         WWidget contents = contentsPtr;
         this.contentsStack_.addWidget(contentsPtr);
+        this.contentsStack_.setLoadPolicy(this.contentsStack_.getCount() - 1, result.loadPolicy_);
         if (this.contentsStack_.getCount() == 1) {
           this.setCurrent(0);
           if (this.isLoaded()) {
@@ -461,6 +480,31 @@ public class WMenu extends WCompositeWidget {
       this.select(this.current_, true);
     }
     return result;
+  }
+  /**
+   * Moves an item.
+   *
+   * <p>Moves the item at the index <code>fromIndex</code> to the index <code>toIndex</code>.
+   */
+  public void moveItem(int fromIndex, int toIndex) {
+    this.moveItem(this.itemAt(fromIndex), toIndex);
+  }
+  /**
+   * Moves an item.
+   *
+   * <p>Moves the item at the <code>item</code> to the index <code>toIndex</code>.
+   */
+  public void moveItem(WMenuItem item, int toIndex) {
+    if (item != null) {
+      boolean needReload = item.loadPolicy_ == ContentLoading.Lazy && item.isContentsLoaded();
+      WMenuItem realItem = this.removeItem(item);
+      if (realItem != null) {
+        this.insertItem(toIndex, realItem);
+        if (needReload) {
+          item.loadContents();
+        }
+      }
+    }
   }
   /**
    * Selects an item.

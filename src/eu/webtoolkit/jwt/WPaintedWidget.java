@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -193,6 +195,11 @@ public abstract class WPaintedWidget extends WInteractWidget {
     update(EnumSet.noneOf(PaintFlag.class));
   }
 
+  public void refresh() {
+    this.update();
+    super.refresh();
+  }
+
   public void resize(final WLength width, final WLength height) {
     if (!width.isAuto() && !height.isAuto()) {
       this.setLayoutSizeAware(false);
@@ -218,6 +225,7 @@ public abstract class WPaintedWidget extends WInteractWidget {
     this.createAreaImage();
     this.areaImage_.addArea(area);
   }
+  // public Area  addArea(<Woow... some pseudoinstantiation type!> area) ;
   /**
    * Inserts an interactive area.
    *
@@ -447,7 +455,7 @@ public abstract class WPaintedWidget extends WInteractWidget {
       wrap.setProperty(Property.StyleRight, "0");
     }
     DomElement canvas = DomElement.createNew(DomElementType.DIV);
-    if (!app.getEnvironment().agentIsSpiderBot()) {
+    if (!app.getEnvironment().isTreatLikeBot()) {
       canvas.setId('p' + this.getId());
     }
     WPaintDevice device = this.painter_.getPaintDevice(false);

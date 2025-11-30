@@ -6,6 +6,7 @@
 package eu.webtoolkit.jwt.auth;
 
 import eu.webtoolkit.jwt.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -28,7 +29,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  *
  * @see AuthService#processAuthToken(String token, AbstractUserDatabase users)
- * @see AuthService#createAuthToken(User user)
+ * @see AuthService#createAuthToken(User user, int authTokenValidity)
  */
 public class AuthTokenResult {
   private static Logger logger = LoggerFactory.getLogger(AuthTokenResult.class);

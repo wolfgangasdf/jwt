@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -27,6 +29,12 @@ import org.slf4j.LoggerFactory;
  * <p>Using {@link WStackedWidget#getCurrentIndex() getCurrentIndex()} and {@link
  * WStackedWidget#setCurrentIndex(int index) setCurrentIndex()} you can retrieve or set the visible
  * widget.
+ *
+ * <p>When calling the above <code>
+ * {@link WStackedWidget#setCurrentIndex(int index) setCurrentIndex()}</code>, this will fire the
+ * {@link WStackedWidget#currentWidgetChanged() currentWidgetChanged()} signal. This allows
+ * developers to know when the current visible widget has changed and what the new visible widget
+ * is.
  *
  * <p>WStackedWidget, like {@link WContainerWidget}, is by default not inline.
  *
@@ -53,6 +61,9 @@ public class WStackedWidget extends WContainerWidget {
     this.widgetsAdded_ = false;
     this.javaScriptDefined_ = false;
     this.loadAnimateJS_ = false;
+    this.loadPolicies_ = new ArrayList<ContentLoading>();
+    this.currentWidgetChanged_ = new Signal1<WWidget>();
+    this.hasEmittedChanged_ = false;
     this.setOverflow(Overflow.Hidden);
     this.addStyleClass("Wt-stack");
     if (parentContainer != null) parentContainer.addWidget(this);
@@ -68,6 +79,8 @@ public class WStackedWidget extends WContainerWidget {
 
   public void addWidget(WWidget widget) {
     super.addWidget(widget);
+    int index = this.getCount() - 1;
+    this.loadPolicies_.add(0 + index, ContentLoading.Eager);
     if (this.currentIndex_ == -1) {
       this.currentIndex_ = 0;
     }
@@ -75,7 +88,9 @@ public class WStackedWidget extends WContainerWidget {
   }
   // public Widget  addWidget(<Woow... some pseudoinstantiation type!> widget) ;
   public WWidget removeWidget(WWidget widget) {
+    int index = this.getIndexOf(widget);
     WWidget result = super.removeWidget(widget);
+    this.loadPolicies_.remove(0 + index);
     if (this.currentIndex_ >= this.getCount()) {
       if (this.getCount() > 0) {
         this.setCurrentIndex(this.getCount() - 1);
@@ -114,6 +129,7 @@ public class WStackedWidget extends WContainerWidget {
   /** Insert a widget at a given index. */
   public void insertWidget(int index, WWidget widget) {
     super.insertWidget(index, widget);
+    this.loadPolicies_.add(0 + index, ContentLoading.Eager);
     if (this.currentIndex_ == -1) {
       this.currentIndex_ = 0;
     }
@@ -149,6 +165,10 @@ public class WStackedWidget extends WContainerWidget {
    * @see WStackedWidget#setCurrentWidget(WWidget widget)
    */
   public void setCurrentIndex(int index, final WAnimation animation, boolean autoReverse) {
+    boolean hasChanged = this.currentIndex_ != index;
+    if (hasChanged) {
+      this.hasEmittedChanged_ = false;
+    }
     if (!animation.isEmpty()
         && WApplication.getInstance().getEnvironment().supportsCss3Animations()
         && (this.isRendered() && this.javaScriptDefined_ || !canOptimizeUpdates())) {
@@ -179,6 +199,19 @@ public class WStackedWidget extends WContainerWidget {
                 + ".wtObj.setCurrent("
                 + this.getWidget(this.currentIndex_).getJsRef()
                 + ");");
+      }
+    }
+    if ((hasChanged || !this.hasEmittedChanged_) && this.currentIndex_ >= 0) {
+      if (this.loadPolicies_.get(this.currentIndex_) == ContentLoading.Lazy) {
+        WContainerWidget container =
+            ObjectUtils.cast(this.getCurrentWidget(), WContainerWidget.class);
+        if (container.getCount() > 0) {
+          this.currentWidgetChanged().trigger(container.getWidget(0));
+          this.hasEmittedChanged_ = true;
+        }
+      } else {
+        this.currentWidgetChanged().trigger(this.getCurrentWidget());
+        this.hasEmittedChanged_ = true;
       }
     }
   }
@@ -251,6 +284,17 @@ public class WStackedWidget extends WContainerWidget {
   public final void setTransitionAnimation(final WAnimation animation) {
     setTransitionAnimation(animation, false);
   }
+  /**
+   * Signal which indicates that the current widget was changed.
+   *
+   * <p>This signal is emitted when the current widget was changed. It holds a pointer to the new
+   * current widget. It is emitted every time the {@link WStackedWidget#setCurrentIndex(int index)
+   * setCurrentIndex()} or {@link WStackedWidget#setCurrentWidget(WWidget widget)
+   * setCurrentWidget()} is called.
+   */
+  public Signal1<WWidget> currentWidgetChanged() {
+    return this.currentWidgetChanged_;
+  }
 
   protected DomElement createDomElement(WApplication app) {
     return super.createDomElement(app);
@@ -284,10 +328,13 @@ public class WStackedWidget extends WContainerWidget {
 
   private WAnimation animation_;
   private boolean autoReverseAnimation_;
-  private int currentIndex_;
+  int currentIndex_;
   private boolean widgetsAdded_;
   private boolean javaScriptDefined_;
   private boolean loadAnimateJS_;
+  List<ContentLoading> loadPolicies_;
+  private Signal1<WWidget> currentWidgetChanged_;
+  private boolean hasEmittedChanged_;
 
   private void defineJavaScript() {
     if (!this.javaScriptDefined_) {
@@ -296,7 +343,7 @@ public class WStackedWidget extends WContainerWidget {
       app.loadJavaScript("js/WStackedWidget.js", wtjs1());
       this.setJavaScriptMember(
           " WStackedWidget",
-          "new Wt4_10_4.WStackedWidget(" + app.getJavaScriptClass() + "," + this.getJsRef() + ");");
+          "new Wt4_12_1.WStackedWidget(" + app.getJavaScriptClass() + "," + this.getJsRef() + ");");
       this.setJavaScriptMember(WT_RESIZE_JS, this.getJsRef() + ".wtObj.wtResize");
       this.setJavaScriptMember(WT_GETPS_JS, this.getJsRef() + ".wtObj.wtGetPs");
       if (this.loadAnimateJS_) {
@@ -315,6 +362,10 @@ public class WStackedWidget extends WContainerWidget {
         this.setJavaScriptMember("wtAutoReverse", this.autoReverseAnimation_ ? "true" : "false");
       }
     }
+  }
+
+  void setLoadPolicy(int index, ContentLoading loadPolicy) {
+    this.loadPolicies_.set(index, loadPolicy);
   }
 
   static WJavaScriptPreamble wtjs1() {

@@ -6,6 +6,7 @@
 package eu.webtoolkit.jwt.auth;
 
 import eu.webtoolkit.jwt.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -282,8 +283,7 @@ public class RegistrationWidget extends WTemplateFormView {
         result = new WLineEdit();
       } else {
         if (field == RegistrationModel.ChoosePasswordField) {
-          WLineEdit p = new WLineEdit();
-          p.setEchoMode(EchoMode.Password);
+          WPasswordEdit p = new WPasswordEdit();
           p.keyWentUp()
               .addListener(
                   this,
@@ -299,8 +299,7 @@ public class RegistrationWidget extends WTemplateFormView {
           result = p;
         } else {
           if (field == RegistrationModel.RepeatPasswordField) {
-            WLineEdit p = new WLineEdit();
-            p.setEchoMode(EchoMode.Password);
+            WPasswordEdit p = new WPasswordEdit();
             p.changed()
                 .addListener(
                     this,

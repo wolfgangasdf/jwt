@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -147,6 +149,7 @@ public abstract class WViewWidget extends WWebWidget {
         WApplication.getInstance().getSession().getRenderer().setVisibleOnly(false);
         DomElement e = this.contents_.createSDomElement(WApplication.getInstance());
         if (!all) {
+          element.removeAllChildren();
           element.setWasEmpty(true);
         }
         element.addChild(e);

@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -556,11 +558,19 @@ public class WCompositeWidget extends WWidget {
 
   protected void render(EnumSet<RenderFlag> flags) {
     this.impl_.render(flags);
+    super.render(flags);
     this.renderOk();
   }
 
   String renderRemoveJs(boolean recursive) {
     return this.impl_.renderRemoveJs(recursive);
+  }
+
+  protected void setParentWidget(WWidget parent) {
+    if (parent != null && !this.isDisabled()) {
+      this.propagateSetEnabled(parent.isEnabled());
+    }
+    super.setParentWidget(parent);
   }
 
   private WWidget impl_;

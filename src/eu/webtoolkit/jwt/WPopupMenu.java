@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -101,6 +103,7 @@ public class WPopupMenu extends WMenu {
    */
   public WPopupMenu(WStackedWidget contentsStack, WContainerWidget parentContainer) {
     super(contentsStack, (WContainerWidget) null);
+    this.flags_ = new BitSet();
     this.topLevel_ = null;
     this.result_ = null;
     this.location_ = null;
@@ -109,8 +112,9 @@ public class WPopupMenu extends WMenu {
     this.triggered_ = new Signal1<WMenuItem>();
     this.cancel_ = new JSignal(this, "cancel");
     this.recursiveEventLoop_ = false;
-    this.willPopup_ = false;
     this.hideOnSelect_ = true;
+    this.open_ = false;
+    this.adjustFlags_ = Orientation.AllOrientations;
     this.autoHideDelay_ = -1;
     String CSS_RULES_NAME = "Wt::WPopupMenu";
     WApplication app = WApplication.getInstance();
@@ -168,13 +172,19 @@ public class WPopupMenu extends WMenu {
     this.popupImpl();
     this.setOffsets(new WLength(42), EnumSet.of(Side.Left, Side.Top));
     this.setOffsets(new WLength(-10000), EnumSet.of(Side.Left, Side.Top));
+    String canAdjustX = this.adjustFlags_.contains(Orientation.Horizontal) ? "true" : "false";
+    String canAdjustY = this.adjustFlags_.contains(Orientation.Vertical) ? "true" : "false";
     this.doJavaScript(
-        "Wt4_10_4.positionXY('"
+        "Wt4_12_1.positionXY('"
             + this.getId()
             + "',"
             + String.valueOf(p.getX())
             + ","
             + String.valueOf(p.getY())
+            + ","
+            + canAdjustX
+            + ","
+            + canAdjustY
             + ");");
   }
   /**
@@ -202,7 +212,7 @@ public class WPopupMenu extends WMenu {
               (WMouseEvent e1) -> {
                 WPopupMenu.this.popupAtButton();
               });
-      this.button_.addStyleClass("dropdown-toggle");
+      this.button_.addThemeStyle("dropdown-toggle");
     }
   }
   /**
@@ -210,13 +220,13 @@ public class WPopupMenu extends WMenu {
    *
    * <p>
    *
-   * @see WWidget#positionAt(WWidget widget, Orientation orientation)
+   * @see WWidget#positionAt(WWidget widget, Orientation orientation, EnumSet adjustOrientations)
    */
   public void popup(WWidget location, Orientation orientation) {
     this.location_ = location;
     this.popupImpl();
     this.doJavaScript(this.getJsRef() + ".wtObj.popupAt(" + location.getJsRef() + ");");
-    this.positionAt(location, orientation);
+    this.positionAt(location, orientation, this.adjustFlags_);
   }
   /**
    * Shows the popup besides a widget.
@@ -267,7 +277,7 @@ public class WPopupMenu extends WMenu {
    *
    * <p>
    *
-   * @see WWidget#positionAt(WWidget widget, Orientation orientation)
+   * @see WWidget#positionAt(WWidget widget, Orientation orientation, EnumSet adjustOrientations)
    */
   public WMenuItem exec(WWidget location, Orientation orientation) {
     if (this.recursiveEventLoop_) {
@@ -398,6 +408,38 @@ public class WPopupMenu extends WMenu {
   public boolean isHideOnSelect() {
     return this.hideOnSelect_;
   }
+  /**
+   * Sets in which direction this popup menu can adjust its coordinates on popup.
+   *
+   * <p>This sets in which orientations the popup menu can adjust its position in order to be fully
+   * visible in the window, potentially hiding the widget (or point) from which it popped up. @see
+   * WWidget#positionAt(WWidget widget, Orientation orientation, EnumSet adjustOrientations)
+   *
+   * <p>By default, it can adjust in both orientations.
+   */
+  public void setAdjust(EnumSet<Orientation> adjustOrientations) {
+    this.adjustFlags_ = EnumSet.copyOf(adjustOrientations);
+    this.refresh();
+  }
+  /**
+   * Sets in which direction this popup menu can adjust its coordinates on popup.
+   *
+   * <p>Calls {@link #setAdjust(EnumSet adjustOrientations) setAdjust(EnumSet.of(adjustOrientation,
+   * adjustOrientations))}
+   */
+  public final void setAdjust(Orientation adjustOrientation, Orientation... adjustOrientations) {
+    setAdjust(EnumSet.of(adjustOrientation, adjustOrientations));
+  }
+  /**
+   * Returns in which orientations this popup widget can adjust its coordinates on popup.
+   *
+   * <p>
+   *
+   * @see WPopupMenu#setAdjust(EnumSet adjustOrientations)
+   */
+  public EnumSet<Orientation> getAdjust() {
+    return this.adjustFlags_;
+  }
 
   protected void renderSelected(WMenuItem item, boolean selected) {}
 
@@ -409,20 +451,32 @@ public class WPopupMenu extends WMenu {
 
   void getSDomChanges(final List<DomElement> result, WApplication app) {
     super.getSDomChanges(result, app);
-    this.willPopup_ = false;
+    this.flags_.clear(BIT_WILL_POPUP);
   }
 
   protected void render(EnumSet<RenderFlag> flags) {
+    if (this.flags_.get(BIT_OPEN_CHANGED)) {
+      if (this.button_ != null && this.button_.isThemeStyleEnabled()) {
+        this.button_.toggleStyleClass("active", this.open_, true);
+      }
+      if (this.getParentItem() != null && this.isThemeStyleEnabled()) {
+        this.getParentItem().toggleStyleClass("open", this.open_);
+      }
+      this.flags_.clear(BIT_OPEN_CHANGED);
+    }
     super.render(flags);
-    this.willPopup_ = false;
+    this.flags_.clear(BIT_WILL_POPUP);
   }
 
   String renderRemoveJs(boolean recursive) {
     String result = super.renderRemoveJs(true);
-    result += "Wt4_10_4.remove('" + this.getId() + "');";
+    result += "Wt4_12_1.remove('" + this.getId() + "');";
     return result;
   }
 
+  private static final int BIT_WILL_POPUP = 0;
+  private static final int BIT_OPEN_CHANGED = 1;
+  private BitSet flags_;
   private WPopupMenu topLevel_;
   WMenuItem result_;
   private WWidget location_;
@@ -431,8 +485,9 @@ public class WPopupMenu extends WMenu {
   private Signal1<WMenuItem> triggered_;
   private JSignal cancel_;
   private boolean recursiveEventLoop_;
-  private boolean willPopup_;
   private boolean hideOnSelect_;
+  private boolean open_;
+  private EnumSet<Orientation> adjustFlags_;
   private int autoHideDelay_;
 
   private void exec() {
@@ -451,7 +506,7 @@ public class WPopupMenu extends WMenu {
   }
 
   private void cancel() {
-    if (this.willPopup_) {
+    if (this.flags_.get(BIT_WILL_POPUP)) {
       return;
     }
     if (!this.isHidden()) {
@@ -464,10 +519,9 @@ public class WPopupMenu extends WMenu {
       return;
     }
     if (this.location_ != null && this.location_ == this.button_) {
-      this.button_.removeStyleClass("active", true);
-      if (this.getParentItem() != null) {
-        this.getParentItem().removeStyleClass("open");
-      }
+      this.open_ = false;
+      this.flags_.set(BIT_OPEN_CHANGED);
+      this.scheduleRender();
     }
     this.location_ = null;
     this.result_ = result;
@@ -490,7 +544,7 @@ public class WPopupMenu extends WMenu {
     WApplication app = WApplication.getInstance();
     this.prepareRender(app);
     this.show();
-    this.willPopup_ = true;
+    this.flags_.set(BIT_WILL_POPUP);
     this.scheduleRender();
   }
 
@@ -498,7 +552,7 @@ public class WPopupMenu extends WMenu {
     if (!this.cancel_.isConnected()) {
       app.loadJavaScript("js/WPopupMenu.js", wtjs1());
       StringBuilder s = new StringBuilder();
-      s.append("new Wt4_10_4.WPopupMenu(")
+      s.append("new Wt4_12_1.WPopupMenu(")
           .append(app.getJavaScriptClass())
           .append(',')
           .append(this.getJsRef())
@@ -540,11 +594,10 @@ public class WPopupMenu extends WMenu {
       return;
     }
     if (!(this.topLevel_ != null) || this.topLevel_ == this) {
-      this.button_.addStyleClass("active", true);
-      if (this.getParentItem() != null) {
-        this.getParentItem().addStyleClass("open");
-      }
+      this.open_ = true;
+      this.flags_.set(BIT_OPEN_CHANGED);
       this.popup(this.button_);
+      this.scheduleRender();
     }
   }
 
@@ -570,6 +623,6 @@ public class WPopupMenu extends WMenu {
         JavaScriptScope.WtClassScope,
         JavaScriptObjectType.JavaScriptConstructor,
         "WPopupMenu",
-        "(function(e,t,n){t.wtObj=this;const o=e.WT;let i=null,s=null,u=null;if(o.isIOS){t.addEventListener(\"touchstart\",T);t.addEventListener(\"touchend\",I)}function c(){a(t,null);t.style.display=\"none\";setTimeout((function(){e.emit(t.id,\"cancel\")}),0)}function r(e,t){e.classList.toggle(\"active\",t)}function d(e){if(e.subMenu)return e.subMenu;{const t=e.lastChild;if(t&&o.hasTag(t,\"UL\")){e.subMenu=t;t.parentItem=e;t.addEventListener(\"mousemove\",l);v(t);return t}return null}}function a(e,t){function n(e,t){if(e===t)return!0;if(t){const o=t.parentNode.parentItem;return!!o&&n(e,o)}return!1}!function e(o){for(const i of o.childNodes)if(n(i,t)){if(i!==t){const t=d(i);t&&e(t)}}else{r(i,!1);const t=d(i);if(t){t.style.display=\"none\";e(t)}}}(e)}function l(e){let n=o.target(e);for(;n&&!o.hasTag(n,\"LI\")&&!o.hasTag(n,\"UL\");)n=n.parentNode;if(o.hasTag(n,\"LI\")){if(n===s)return;s=n;r(n,!0);const e=d(n);e&&function(e){e.style.display=\"block\";if(e.parentNode===e.parentItem){e.parentNode.removeChild(e);t.parentNode.appendChild(e)}const n=o.px(e,\"paddingTop\")+o.px(e,\"borderTopWidth\");o.positionAtWidget(e.id,e.parentItem.id,o.Horizontal,-n);a(e,null);if(o.isIOS){e.removeEventListener(\"touchstart\",T);e.addEventListener(\"touchstart\",T);e.removeEventListener(\"touchend\",I);e.addEventListener(\"touchend\",I)}}(e);a(t,n)}}function f(){clearTimeout(i);n>=0&&(i=setTimeout(c,n))}function m(){clearTimeout(i)}function v(e){e.addEventListener(\"mouseleave\",f);e.addEventListener(\"mouseenter\",m)}function p(){return null!==document.getElementById(t.id)}function h(e){p()&&1!==o.button(e)&&c()}function E(){p()&&c()}function L(e){p()&&27===e.keyCode&&c()}this.setHidden=function(e){if(i){clearTimeout(i);i=null}s=null;if(e){t.style.position=\"\";t.style.display=\"\";t.style.left=\"\";t.style.top=\"\";document.removeEventListener(\"mousedown\",h);!function(){if(o.isIOS){document.removeEventListener(\"touchstart\",y);document.removeEventListener(\"touchend\",g)}else document.removeEventListener(\"click\",E)}();document.removeEventListener(\"keydown\",L)}else{setTimeout((function(){document.addEventListener(\"mousedown\",h);!function(){if(o.isIOS){document.addEventListener(\"touchstart\",y);document.addEventListener(\"touchend\",g)}else document.addEventListener(\"click\",E)}();document.addEventListener(\"keydown\",L)}),0);t.style.display=\"block\"}a(t,null)};this.popupAt=function(e){v(e)};function y(e){const t=e.originalEvent.touches;u=t.length>1?null:{x:t[0].screenX,y:t[0].screenY}}function T(e){e.stopPropagation()}function g(e){if(u){const t=e.originalEvent.changedTouches[0];Math.abs(u.x-t.screenX)<20&&Math.abs(u.y-t.screenY)<20&&E();u=null}}function I(e){e.stopPropagation()}setTimeout((function(){v(t)}),0);t.addEventListener(\"mousemove\",l)})");
+        "(function(e,t,n){t.wtObj=this;const o=e.WT;let i=null,s=null,u=null;if(o.isIOS){t.addEventListener(\"touchstart\",T);t.addEventListener(\"touchend\",I)}function c(){a(t,null);t.style.display=\"none\";setTimeout((function(){e.emit(t.id,\"cancel\")}),0)}function r(e,t){e.classList.toggle(\"active\",t)}function d(e){if(e.subMenu)return e.subMenu;{const t=e.lastChild;if(t&&o.hasTag(t,\"UL\")){e.subMenu=t;t.parentItem=e;t.addEventListener(\"mousemove\",l);v(t);return t}return null}}function a(e,t){function n(e,t){if(e===t)return!0;if(t){const o=t.parentNode.parentItem;return!!o&&n(e,o)}return!1}!function e(o){for(const i of o.childNodes)if(n(i,t)){if(i!==t){const t=d(i);t&&e(t)}}else{r(i,!1);const t=d(i);if(t){t.style.display=\"none\";e(t)}}}(e)}function l(e){let n=o.target(e);for(;n&&!o.hasTag(n,\"LI\")&&!o.hasTag(n,\"UL\");)n=n.parentNode;if(o.hasTag(n,\"LI\")){if(n===s)return;s=n;r(n,!0);const e=d(n);e&&function(e){e.style.display=\"block\";if(e.parentNode===e.parentItem){e.parentNode.removeChild(e);t.parentNode.appendChild(e)}const n=o.px(e,\"paddingTop\")+o.px(e,\"borderTopWidth\");o.positionAtWidget(e.id,e.parentItem.id,o.Horizontal,-n,!1,!0);a(e,null);if(o.isIOS){e.removeEventListener(\"touchstart\",T);e.addEventListener(\"touchstart\",T);e.removeEventListener(\"touchend\",I);e.addEventListener(\"touchend\",I)}}(e);a(t,n)}}function f(){clearTimeout(i);n>=0&&(i=setTimeout(c,n))}function m(){clearTimeout(i)}function v(e){e.addEventListener(\"mouseleave\",f);e.addEventListener(\"mouseenter\",m)}function p(){return null!==document.getElementById(t.id)}function h(e){p()&&1!==o.button(e)&&c()}function E(){p()&&c()}function L(e){p()&&27===e.keyCode&&c()}this.setHidden=function(e){if(i){clearTimeout(i);i=null}s=null;if(e){t.style.position=\"\";t.style.display=\"none\";t.style.left=\"\";t.style.top=\"\";document.removeEventListener(\"mousedown\",h);!function(){if(o.isIOS){document.removeEventListener(\"touchstart\",y);document.removeEventListener(\"touchend\",g)}else document.removeEventListener(\"click\",E)}();document.removeEventListener(\"keydown\",L)}else{setTimeout((function(){document.addEventListener(\"mousedown\",h);!function(){if(o.isIOS){document.addEventListener(\"touchstart\",y);document.addEventListener(\"touchend\",g)}else document.addEventListener(\"click\",E)}();document.addEventListener(\"keydown\",L)}),0);t.style.display=\"block\"}a(t,null)};this.popupAt=function(e){v(e)};function y(e){const t=e.originalEvent.touches;u=t.length>1?null:{x:t[0].screenX,y:t[0].screenY}}function T(e){e.stopPropagation()}function g(e){if(u){const t=e.originalEvent.changedTouches[0];Math.abs(u.x-t.screenX)<20&&Math.abs(u.y-t.screenY)<20&&E();u=null}}function I(e){e.stopPropagation()}setTimeout((function(){v(t)}),0);t.addEventListener(\"mousemove\",l)})");
   }
 }

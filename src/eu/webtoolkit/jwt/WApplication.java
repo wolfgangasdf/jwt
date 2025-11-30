@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -83,7 +85,7 @@ import org.slf4j.LoggerFactory;
  *   <li>support for server-initiated updates with {@link WApplication#enableUpdates(boolean
  *       enabled) enableUpdates()}
  *   <li>localization information and message resources bundles, with {@link
- *       WApplication#setLocale(Locale locale) setLocale()} and {@link
+ *       WApplication#setLocale(Locale locale, boolean doRefresh) setLocale()} and {@link
  *       WApplication#setLocalizedStrings(WLocalizedStrings translator) setLocalizedStrings()}
  * </ul>
  */
@@ -164,7 +166,9 @@ public class WApplication extends WObject {
     this.hideLoadingIndicator_ = new EventSignal("hideload", this);
     this.unloaded_ = new JSignal(this, "Wt-unload");
     this.idleTimeout_ = new JSignal(this, "Wt-idleTimeout");
+    this.addedCookies_ = new HashMap<String, String>();
     this.soundManager_ = null;
+    this.serverSideFontMetrics_ = (ServerSideFontMetrics) null;
     this.showLoadJS = new JSlot();
     this.hideLoadJS = new JSlot();
     this.session_.setApplication(this);
@@ -894,8 +898,9 @@ public class WApplication extends WObject {
    *
    * <p>By passing an empty <code>locale</code>, the default locale is chosen.
    *
-   * <p>When the locale is changed, {@link WApplication#refresh() refresh()} is called, which will
-   * resolve the strings of the current user-interface in the new locale.
+   * <p>By default, when the locale is changed, {@link WApplication#refresh() refresh()} is called,
+   * which will resolve the strings of the current user-interface in the new locale. This can be
+   * changed by having the <code>doRefresh</code> parameter set to <code>false</code>.
    *
    * <p>At construction, the locale is copied from the environment ({@link
    * WEnvironment#getLocale()}), and this is the locale that was configured by the user in his
@@ -906,18 +911,22 @@ public class WApplication extends WObject {
    * @see WApplication#getLocalizedStrings()
    * @see WString#tr(String key)
    */
-  public void setLocale(final Locale locale) {
+  public void setLocale(final Locale locale, boolean doRefresh) {
     this.locale_ = locale;
     this.localeChanged_ = true;
-    this.refresh();
+    if (doRefresh) {
+      this.refresh();
+    }
   }
   /**
-   * Returns the current locale.
+   * Changes the locale.
    *
-   * <p>
-   *
-   * @see WApplication#setLocale(Locale locale)
+   * <p>Calls {@link #setLocale(Locale locale, boolean doRefresh) setLocale(locale, true)}
    */
+  public final void setLocale(final Locale locale) {
+    setLocale(locale, true);
+  }
+  /** Returns the current locale. */
   public Locale getLocale() {
     return this.locale_;
   }
@@ -1764,9 +1773,13 @@ public class WApplication extends WObject {
   public boolean require(final String uri, final String symbol) {
     WApplication.ScriptLibrary sl = new WApplication.ScriptLibrary(uri, symbol);
     if (this.scriptLibraries_.indexOf(sl) == -1) {
-      StringBuilder ss = new StringBuilder();
-      this.streamBeforeLoadJavaScript(ss, false);
-      sl.beforeLoadJS = ss.toString();
+      StringBuilder bs = new StringBuilder();
+      StringBuilder ps = new StringBuilder();
+      this.streamJavaScriptPreamble(ps, false);
+      sl.beforeLoadPreambles = ps.toString();
+      this.streamBeforeLoadJavaScript(bs, false, false);
+      sl.beforeLoadJS = bs.toString();
+      this.beforeLoadJavaScript_ = "";
       this.scriptLibraries_.add(sl);
       ++this.scriptLibrariesAdded_;
       return true;
@@ -1965,6 +1978,7 @@ public class WApplication extends WObject {
     cookie.setPath(path);
     cookie.setSecure(secure);
     this.session_.getRenderer().setCookie(cookie);
+    this.addedCookies_.put(name, value);
   }
   /**
    * Sets a new cookie.
@@ -2007,6 +2021,7 @@ public class WApplication extends WObject {
    */
   public void removeCookie(final javax.servlet.http.Cookie cookie) {
     this.session_.getRenderer().removeCookie(cookie);
+    this.removeAddedCookies(cookie.getName());
   }
   /**
    * Removes a cookie.
@@ -2022,6 +2037,7 @@ public class WApplication extends WObject {
     rmCookie.setDomain(domain);
     rmCookie.setPath(path);
     this.session_.getRenderer().removeCookie(rmCookie);
+    this.removeAddedCookies(name);
   }
   /**
    * Removes a cookie.
@@ -2259,9 +2275,9 @@ public class WApplication extends WObject {
     if (this.loadingIndicator_ != null) {
       this.domRoot_.addWidget(indicator);
       this.showLoadJS.setJavaScript(
-          "function(o,e) {Wt4_10_4.inline('" + this.loadingIndicator_.getId() + "');}");
+          "function(o,e) {Wt4_12_1.inline('" + this.loadingIndicator_.getId() + "');}");
       this.hideLoadJS.setJavaScript(
-          "function(o,e) {Wt4_10_4.hide('" + this.loadingIndicator_.getId() + "');}");
+          "function(o,e) {Wt4_12_1.hide('" + this.loadingIndicator_.getId() + "');}");
       this.loadingIndicator_.hide();
     }
   }
@@ -2571,6 +2587,21 @@ public class WApplication extends WObject {
     return this.unsuspended_;
   }
   /**
+   * Returns the font metrics for server-side rendering.
+   *
+   * <p>In case we require the fallback to render things server-side, this will require the
+   * construction of font metrics. The application will construct this object only once, as an
+   * optimization.
+   *
+   * <p>In case the object did not yet exist, a new instance is created.
+   */
+  public ServerSideFontMetrics getServerSideFontMetrics() {
+    if (!(this.serverSideFontMetrics_ != null)) {
+      this.serverSideFontMetrics_ = new ServerSideFontMetrics();
+    }
+    return this.serverSideFontMetrics_;
+  }
+  /**
    * Notifies an event to the application.
    *
    * <p>This method is called by the event loop for propagating an event to the application. It
@@ -2667,7 +2698,7 @@ public class WApplication extends WObject {
       this.domRoot2_.enableAjax();
     }
     this.doJavaScript(
-        "Wt4_10_4.ajaxInternalPaths("
+        "Wt4_12_1.ajaxInternalPaths("
             + WWebWidget.jsStringLiteral(this.resolveRelativeUrl(this.getBookmarkUrl("/")))
             + ");");
   }
@@ -2764,11 +2795,13 @@ public class WApplication extends WObject {
       this.uri = anUri;
       this.symbol = aSymbol;
       this.beforeLoadJS = "";
+      this.beforeLoadPreambles = "";
     }
 
     public String uri;
     public String symbol;
     public String beforeLoadJS;
+    public String beforeLoadPreambles;
 
     public boolean equals(final WApplication.ScriptLibrary other) {
       return this.uri.equals(other.uri);
@@ -2871,6 +2904,20 @@ public class WApplication extends WObject {
   EventSignal hideLoadingIndicator_;
   private JSignal unloaded_;
   private JSignal idleTimeout_;
+  private Map<String, String> addedCookies_;
+
+  public String findAddedCookies(final String name) {
+    String i = this.addedCookies_.get(name);
+    if (i == null) {
+      return null;
+    } else {
+      return i;
+    }
+  }
+
+  private void removeAddedCookies(final String name) {
+    this.addedCookies_.remove(name);
+  }
 
   WContainerWidget getTimerRoot() {
     return this.timerRoot_;
@@ -2958,7 +3005,7 @@ public class WApplication extends WObject {
     }
   }
 
-  private boolean removeExposedResource(WResource resource) {
+  boolean removeExposedResource(WResource resource) {
     String key = this.resourceMapKey(resource);
     WResource i = this.exposedResources_.get(key);
     if (i != null && i == resource) {
@@ -3020,8 +3067,10 @@ public class WApplication extends WObject {
     this.afterLoadJavaScript_ = "";
   }
 
-  void streamBeforeLoadJavaScript(final StringBuilder out, boolean all) {
-    this.streamJavaScriptPreamble(out, all);
+  void streamBeforeLoadJavaScript(final StringBuilder out, boolean all, boolean withPreamble) {
+    if (withPreamble) {
+      this.streamJavaScriptPreamble(out, all);
+    }
     if (!all) {
       if (this.newBeforeLoadJavaScript_ != 0) {
         out.append(
@@ -3032,6 +3081,10 @@ public class WApplication extends WObject {
       out.append(this.beforeLoadJavaScript_);
     }
     this.newBeforeLoadJavaScript_ = 0;
+  }
+
+  final void streamBeforeLoadJavaScript(final StringBuilder out, boolean all) {
+    streamBeforeLoadJavaScript(out, all, true);
   }
 
   private void streamJavaScriptPreamble(final StringBuilder out, boolean all) {
@@ -3045,7 +3098,7 @@ public class WApplication extends WObject {
       String scope =
           preamble.scope == JavaScriptScope.ApplicationScope
               ? this.getJavaScriptClass()
-              : "Wt4_10_4";
+              : "Wt4_12_1";
       if (preamble.type == JavaScriptObjectType.JavaScriptFunction) {
         out.append(scope)
             .append('.')
@@ -3119,6 +3172,7 @@ public class WApplication extends WObject {
   }
 
   private SoundManager soundManager_;
+  private ServerSideFontMetrics serverSideFontMetrics_;
   static String RESOURCES_URL = "resourcesURL";
   private JSlot showLoadJS;
   private JSlot hideLoadJS;

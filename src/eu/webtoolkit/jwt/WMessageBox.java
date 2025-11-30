@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -141,8 +143,6 @@ public class WMessageBox extends WDialog {
   /** Sets the icon. */
   public void setIcon(Icon icon) {
     this.icon_ = icon;
-    this.iconW_.toggleStyleClass("Wt-msgbox-icon", this.icon_ != Icon.None);
-    this.text_.toggleStyleClass("Wt-msgbox-text", this.icon_ != Icon.None);
     this.iconW_.setSize(this.icon_ != Icon.None ? 2.5 : 1);
     switch (this.icon_) {
       case None:
@@ -170,7 +170,8 @@ public class WMessageBox extends WDialog {
    *
    * <p>When the button is clicked, the associated result will be returned.
    */
-  public void addButton(WPushButton button, final StandardButton result) {
+  public WPushButton addButton(WPushButton button, final StandardButton result) {
+    WPushButton buttonPtr = button;
     this.buttons_.add(new WMessageBox.Button());
     this.buttons_.get(this.buttons_.size() - 1).button = button;
     this.buttons_.get(this.buttons_.size() - 1).result = result;
@@ -185,6 +186,7 @@ public class WMessageBox extends WDialog {
       this.setDefaultButton(button);
     }
     this.getFooter().addWidget(button);
+    return buttonPtr;
   }
   /**
    * Adds a custom button with given text.
@@ -398,6 +400,15 @@ public class WMessageBox extends WDialog {
     super.setHidden(hidden, animation);
   }
 
+  protected void render(EnumSet<RenderFlag> flags) {
+    if (this.isThemeStyleEnabled()) {
+      this.getContents().addStyleClass("Wt-msgbox-body");
+      this.iconW_.toggleStyleClass("Wt-msgbox-icon", this.icon_ != Icon.None);
+      this.text_.toggleStyleClass("Wt-msgbox-text", this.icon_ != Icon.None);
+    }
+    super.render(flags);
+  }
+
   static class Button {
     private static Logger logger = LoggerFactory.getLogger(Button.class);
 
@@ -419,7 +430,6 @@ public class WMessageBox extends WDialog {
     this.getContents().addWidget(icon);
     WText text = this.text_ = new WText();
     this.getContents().addWidget(text);
-    this.getContents().addStyleClass("Wt-msgbox-body");
     this.rejectWhenEscapePressed();
     this.finished()
         .addListener(

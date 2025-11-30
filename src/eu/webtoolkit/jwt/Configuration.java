@@ -27,12 +27,14 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import eu.webtoolkit.jwt.servlet.WebResponse;
+
 /**
  * JWt application configuration class.
  * <p>
  * This class holds the configuration for JWt, controlling general features of the interaction between
  * the browser and the web application.
- * 
+ *
  * @see WtServlet#getConfiguration()
  */
 public class Configuration {
@@ -51,7 +53,7 @@ public class Configuration {
 		 * capabilities of the browser to diagnose the problem (convenient during development).
 		 */
 		NoErrors,
-		
+
 		/**
 		 * The application dies with a message to the user indicating an internal error.
 		 * This is the default behaviour.
@@ -63,6 +65,21 @@ public class Configuration {
 		 */
 		ErrorMessageWithStack
 	}
+
+	/**
+	 * An enumeration for what part of the JavaScript have their error handle by Wt.
+	 */
+	public enum ClientSideErrorReportLevel {
+		/**
+		 * Exclude inline JavaScript and additional scripts, not part of Wt's framework.
+		 */
+		Framework,
+
+		/**
+	 	 * All JavaScript executed by the browser for the page.
+	 	 */
+		All
+	};
 
 	/**
 	 * A class describing an IPv4 or IPv6 network
@@ -166,10 +183,12 @@ public class Configuration {
 	private ArrayList<String> ajaxAgentList = new ArrayList<String>();
 	private boolean ajaxAgentWhiteList = false;
 	private ErrorReporting errorReporting = ErrorReporting.ErrorMessage;
+	private ClientSideErrorReportLevel clientSideErrorReportLevel = ClientSideErrorReportLevel.Framework;
 
 	private String favicon = "/favicon.ico";
 	private boolean progressiveBootstrap = false;
-	
+	private boolean delayLoadAtBoot = true;
+
 	private int sessionTimeout = 600;
 	private int idleTimeout = -1;
 	private int indicatorTimeout = 500;
@@ -179,6 +198,9 @@ public class Configuration {
 	private String uaCompatible = "";
 	private List<MetaHeader> metaHeaders = new ArrayList<MetaHeader>();
 	private List<HeadMatter> headMatter = new ArrayList<HeadMatter>();
+	private boolean useXFrameSameOrigin = true;
+	private List<HttpHeader> httpHeaders = new ArrayList<HttpHeader>();
+	private boolean useScriptNonce = false;
 	private int internalDeploymentSize = 0;
 	private long maxRequestSize = 1024*1024; // 1 Megabyte
 	private long maxFormDataSize = 1024*1024; // 1 Megabyte
@@ -196,7 +218,7 @@ public class Configuration {
 	 */
 	public Configuration() {
 		properties_.put(WApplication.RESOURCES_URL, "/wt-resources/");
-		
+
 		botList.add(".*Googlebot.*");
 		botList.add(".*msnbot.*");
 		botList.add(".*Slurp.*");
@@ -205,20 +227,24 @@ public class Configuration {
 		botList.add(".ia_archiver.*");
 		botList.add(".*Googlebot.*");
 		botList.add(".*Twiceler.*");
+
+		httpHeaders.add(new HttpHeader("X-Content-Type-Options", "nosniff"));
+		httpHeaders.add(new HttpHeader("Strict-Transport-Security", "max-age=15724800; includeSubDomains"));
+		httpHeaders.add(new HttpHeader("Referrer-Policy", "strict-origin-when-cross-origin"));
 	}
 
 	/**
 	 * Reads a configuration from an XML file.
 	 * <p>
 	 * An example configuration file can be found in the JWt source distribution.
-	 * 
+	 *
 	 * @param configurationFile
 	 */
 	public Configuration(File configurationFile) {
 		logger.info("Reading configuration file: " + configurationFile.getAbsolutePath());
-		
+
 		properties_.put(WApplication.RESOURCES_URL, "/wt-resources/");
-		
+
 		final String errorMessage = "Error parsing configuration file: ";
 
 		if (configurationFile != null) {
@@ -246,9 +272,11 @@ public class Configuration {
 					node = elements.item(i);
 					if (node.getNodeName().equalsIgnoreCase("debug")) {
 						setDebug(parseBoolean(errorMessage, node));
+					} else if (node.getNodeName().equalsIgnoreCase("debug-level")) {
+						parseClientSideErrorReportLevel(errorMessage, node);
 					} else if (node.getNodeName().equalsIgnoreCase("properties")) {
 						NodeList properties = node.getChildNodes();
-						for (int j = 0; j < properties.getLength(); j++) { 
+						for (int j = 0; j < properties.getLength(); j++) {
 							Node n = properties.item(j);
 							if (n.getNodeName().equals("property")) {
 								Node propertyName = n.getAttributes().getNamedItem("name");
@@ -258,6 +286,8 @@ public class Configuration {
 						}
 					} else if (node.getNodeName().equalsIgnoreCase("progressive-bootstrap")) {
 						setProgressiveBootstrap(parseBoolean(errorMessage, node));
+					} else if (node.getNodeName().equalsIgnoreCase("delay-load-at-boot")) {
+						setDelayLoadAtBoot(parseBoolean(errorMessage, node));
 					} else if (node.getNodeName().equalsIgnoreCase("ua-compatible")) {
 						setUaCompatible(node.getTextContent().trim());
 					} else if (node.getNodeName().equalsIgnoreCase("send-xhtml-mime-type")) {
@@ -295,6 +325,12 @@ public class Configuration {
 								this.allowedOrigins_ = new HashSet<String>();
 							this.allowedOrigins_.add(origin);
 						}
+					} else if (node.getNodeName().equalsIgnoreCase("x-frame-same-origin")) {
+						setUseXFrameSameOrigin(parseBoolean(errorMessage, node));
+					} else if (node.getNodeName().equalsIgnoreCase("http-headers")) {
+						parseHttpHeaders(errorMessage, node);
+					} else if (node.getNodeName().equalsIgnoreCase("use-script-nonce")) {
+						setUseScriptNonce(parseBoolean(errorMessage, node));
 					}
 				}
 			}
@@ -312,6 +348,30 @@ public class Configuration {
 		}
 	}
 
+	private void parseHttpHeaders(String errorMessage, Node node) {
+		NodeList httpHeaders = node.getChildNodes();
+		Node n;
+		for (int i = 0; i < httpHeaders.getLength(); i++) {
+			n = httpHeaders.item(i);
+			if (n.getNodeName().equalsIgnoreCase("header")) {
+				Node headerName = n.getAttributes().getNamedItem("name");
+				if (headerName == null) {
+					throw new RuntimeException(errorMessage + "header element must contain a name");
+				}
+				String name = headerName.getTextContent().trim();
+				String content = new String();
+
+				Node headerContent = n.getAttributes().getNamedItem("content");
+				if (headerContent != null) {
+					content = headerContent.getTextContent().trim();
+				}
+
+				HttpHeader header = new HttpHeader(name, content);
+				this.httpHeaders.add(header);
+			}
+		}
+	}
+
 	private boolean parseBoolean(String errorMessage, Node n) {
 		try {
 			return Boolean.parseBoolean(n.getTextContent().trim());
@@ -320,17 +380,28 @@ public class Configuration {
 		}
 	}
 
+	private void parseClientSideErrorReportLevel(String errorMessage, Node n) {
+		String text = n.getTextContent().trim();
+		if (text.equalsIgnoreCase("all")) {
+			clientSideErrorReportLevel = ClientSideErrorReportLevel.All;
+		} else if (text.equalsIgnoreCase("framework")) {
+			clientSideErrorReportLevel = ClientSideErrorReportLevel.Framework;
+		} else {
+			throw new RuntimeException(errorMessage + "Cannot parse value from element " + n.getNodeName() + "the value should be either 'all' or 'framework'");
+		}
+	}
+
 	/**
 	 * Sets properties.
 	 * <br/>
-	 * Examples: 
+	 * Examples:
 	 * <ul>
 	 * 	<li>smtp.host: SMTP host used by JWt to send out emails </li>
 	 * 	<li>smtp.port: SMTP port used by JWt to send out emails</li>
 	 * </ul>
-	 * 
+	 *
 	 * @param properties
-	 * 
+	 *
 	 * @see #getProperties()
 	 * @see #getProperty(String)
 	 */
@@ -353,7 +424,7 @@ public class Configuration {
 	 * Returns a property value.
 	 * <p>
 	 * Properties may be used to adapt applications to their deployment environment.
-	 * 
+	 *
 	 * @param name
 	 * @return the property value, or <code>null</code> if the property has not been defined.
 	 */
@@ -377,9 +448,9 @@ public class Configuration {
 
 	/**
 	 * Returns the plain-HTML redirect message.
-	 * 
+	 *
 	 * @return the plain-HTML redirect message.
-	 * 
+	 *
 	 * @see #setRedirectMessage(String)
 	 */
 	public String getRedirectMessage() {
@@ -402,9 +473,9 @@ public class Configuration {
 	}
 	/**
 	 * Returns whether XHTML should be used (if supported by the client).
-	 * 
+	 *
 	 * @return whether XHTML should be used.
-	 * 
+	 *
 	 * @see #setSendXHTMLMimeType(boolean)
 	 */
 	public boolean sendXHTMLMimeType() {
@@ -422,21 +493,21 @@ public class Configuration {
 	 * so that you can inspect the stack trace.
 	 * <p>
 	 * Debugging is off by default.
-	 * 
+	 *
 	 * @deprecated use {@link #setErrorReporting(ErrorReporting)} instead.
 	 */
 	public void setDebug(boolean how) {
 		if (how)
 			errorReporting = ErrorReporting.NoErrors;
-		else 
+		else
 			errorReporting = ErrorReporting.ErrorMessage;
 	}
 
 	/**
 	 * Returns whether debugging is enabled.
-	 * 
+	 *
 	 * @return whether debugging is enabled.
-	 * 
+	 *
 	 * @see #setDebug(boolean)
 	 * @deprecated use {@link #getErrorReporting()} instead.
 	 */
@@ -490,7 +561,7 @@ public class Configuration {
 	 * <p>
 	 * Note: some widgets, such as {@link WTreeView}, dynamically manipulate rules in this stylesheet, and will no longer work
 	 * properly when inline CSS is disabled.
-	 * 
+	 *
 	 * @param inlineCss
 	 */
 	public void setInlineCss(boolean inlineCss) {
@@ -499,9 +570,9 @@ public class Configuration {
 
 	/**
 	 * Returns whether inline CSS may be generated.
-	 * 
+	 *
 	 * @return whether inline CSS may be generated.
-	 * 
+	 *
 	 * @see #setInlineCss(boolean)
 	 */
 	public boolean isInlineCss() {
@@ -538,7 +609,7 @@ public class Configuration {
 	 * Depending on the value of {@link #isAjaxAgentWhiteList()}, the list is a white-list or a black-list.
 	 *
 	 * @return the list of user agents that are (not) considered for AJAX sessions.
-	 * 
+	 *
 	 * @see #setAjaxAgentList(ArrayList, boolean)
 	 * @see #agentSupportsAjax(String)
 	 */
@@ -548,9 +619,9 @@ public class Configuration {
 
 	/**
 	 * Returns whether the {@link #getAjaxAgentList()} is a white list or black list.
-	 * 
+	 *
 	 * @return whether the {@link #getAjaxAgentList()} is a white list or black list.
-	 * 
+	 *
 	 * @see #setAjaxAgentList(ArrayList, boolean)
 	 * @see #agentSupportsAjax(String)
 	 */
@@ -561,21 +632,21 @@ public class Configuration {
 
 	/**
 	 * Returns whether the user agent should be considered as one with Ajax support.
-	 * 
+	 *
 	 * @return whether the user agent should be considered as one with Ajax support.
-	 * 
+	 *
 	 * @see #setAjaxAgentList(ArrayList, boolean)
 	 */
 	public boolean agentSupportsAjax(String userAgent) {
 		boolean inList = false;
-		
+
 		for (String regex : ajaxAgentList) {
 			if (userAgent.matches(regex)) {
 				inList = true;
 				break;
 			}
 		}
-		
+
 		if (ajaxAgentWhiteList)
 			return inList;
 		else
@@ -617,9 +688,9 @@ public class Configuration {
 
 	/**
 	 * Returns the list of user agents that are treated as bots.
-	 * 
+	 *
 	 * @return the list of user agents that are treated as bots.
-	 * 
+	 *
 	 * @see #setBotList(ArrayList)
 	 */
 	public ArrayList<String> getBotList() {
@@ -628,7 +699,7 @@ public class Configuration {
 
 	/**
 	 * Returns whether the user agent is a bot.
-	 * 
+	 *
 	 * @see #setBotList(ArrayList)
 	 */
 	public boolean agentIsBot(String userAgent) {
@@ -636,13 +707,13 @@ public class Configuration {
 			if (userAgent.matches(regex))
 				return true;
 		}
-		
+
 		return false;
 	}
-	
+
 	/**
 	 * Configures a path to a favicon.
-	 * 
+	 *
 	 * By default, a browser will fetch a favicon from "/favicon.ico". <br>
 	 * Using this setting, you may provide a custom path to the favicon.
 	 * <p>
@@ -654,9 +725,9 @@ public class Configuration {
 
 	/**
 	 * Returns the path for the favicon
-	 * 
+	 *
 	 * @return the path for the favicon
-	 * 
+	 *
 	 * @see #setFavicon(String)
 	 */
 	public String getFavicon() {
@@ -707,18 +778,41 @@ public class Configuration {
 
 	/**
 	 * Returns whether the progressive bootstrap method is used.
-	 * 
+	 *
 	 * The method may take into account the internalPath to differentiate between
-	 * certain deep links which display widgets that do not progress well (such 
+	 * certain deep links which display widgets that do not progress well (such
 	 * as table views or tree views).
-	 * 
-	 * @param internalPath the initial internal path  
+	 *
+	 * @param internalPath the initial internal path
 	 * @return whether the progressive bootstrap method is used.
-	 * 
+	 *
 	 * @see #setProgressiveBootstrap(boolean).
 	 */
 	public boolean progressiveBootstrap(String internalPath) {
 		return this.progressiveBootstrap ;
+	}
+
+	/**
+	 * Configures whether loading the application is delayed at boot.
+	 *
+	 *	By default, the loading of the application is delayed. This can in
+	 *	some very specific circumstances lead to the browser waiting several
+	 *	seconds before loading the application.
+	 *
+	 *	If this is a bug that you are facing, consider setting this to false.
+	 *	This could however impact your code if you inject JS during boot.
+	 */
+	public void setDelayLoadAtBoot(boolean enable) {
+		this.delayLoadAtBoot = enable;
+	}
+
+	/**
+	 * Returns whether loading of the application is delayed at boot
+	 *
+	 * @see #setDelayLoadAtBoot(boolean).
+	 */
+	public boolean isDelayLoadAtBoot() {
+		return this.delayLoadAtBoot;
 	}
 
 	public int getKeepAlive() {
@@ -728,10 +822,10 @@ public class Configuration {
 	public int getMultiSessionCookieTimeout() {
 		return getSessionTimeout() * 2;
 	}
-	
+
 	/**
 	 * Returns the session timeout.
-	 * 
+	 *
 	 * @return the session timeout.
 	 */
 	public int getSessionTimeout() {
@@ -763,16 +857,16 @@ public class Configuration {
 	public void setIdleTimeout(int timeout) {
 		this.idleTimeout = timeout;
 	}
-	
+
 	/**
 	 * Sets the maximum request size (in bytes).
-	 * 
+	 *
 	 * The default value is 1MB
 	 */
 	public void setMaximumRequestSize(long requestSize) {
 		this.maxRequestSize = requestSize;
 	}
-	
+
 	void setSessionTimeout(int sessionTimeout) {
 		if (sessionTimeout <= 0)
 			this.sessionTimeout = 10 * 60;
@@ -787,10 +881,10 @@ public class Configuration {
 	public int getDoubleClickTimeout() {
 		return doubleClickTimeout;
 	}
-	
+
 	/**
 	 * Sets the double click timeout.
-	 * 
+	 *
 	 * The default value is 200 (ms).
 	 */
 	public void setDoubleClickTimeout(int doubleClickTimeout) {
@@ -799,27 +893,27 @@ public class Configuration {
 
 	/**
 	 * Returns the loading indicator timeout.
-	 * 
+	 *
 	 * When a response time for an AJAX call exceeds this time, a loading indicator is shown.
-	 * 
+	 *
 	 * @return the loading indicator timeout in milliseconds.
 	 */
 	public int getIndicatorTimeout() {
 		return indicatorTimeout;
 	}
-	
+
 	/**
 	 * Sets the loading indicator timeout.
-	 * 
+	 *
 	 * When a response time for an AJAX call exceeds this time, a loading indicator is shown.
-	 * 
+	 *
 	 * @param timeout the timeout in milliseconds.
 	 */
 	public void setIndicatorTimeout(int timeout) {
 		this.indicatorTimeout = timeout;
 	}
 
-	
+
 	public int getBootstrapTimeout() {
 		return bootstrapTimeout;
 	}
@@ -827,20 +921,34 @@ public class Configuration {
 	/**
 	 * Returns the error reporting mode.
 	 */
-	public ErrorReporting getErrorReporting() { 
-		return errorReporting; 
+	public ErrorReporting getErrorReporting() {
+		return errorReporting;
 	}
-	
+
 	/**
 	 * Sets the error reporting mode.
 	 */
-	public void setErrorReporting(ErrorReporting err) { 
+	public void setErrorReporting(ErrorReporting err) {
 		errorReporting = err;
 	}
 
 	/**
+	 * Returns the error reporting level.
+	 */
+	public ClientSideErrorReportLevel getClientSideErrorReportingLevel() {
+		return clientSideErrorReportLevel;
+	}
+
+	/**
+	 * Sets the error reporting level.
+	 */
+	public void setClientSideErrorReportingLevel(ClientSideErrorReportLevel lvl) {
+		clientSideErrorReportLevel = lvl;
+	}
+
+	/**
 	 * Configures different rendering engines for certain browsers.
-	 * 
+	 *
 	 * Currently this is only used to select IE7 compatible rendering
 	 * engine for IE8, which solves problems of unreliable and slow
 	 * rendering performance for VML which Microsoft broke in IE8.
@@ -848,28 +956,28 @@ public class Configuration {
      * Before 3.3.0, the default value was IE8=IE7, but since 3.3.0
 	 * this has been changed to an empty string (i.e. let IE8 use the
 	 * standard IE8 rendering engine) to take advantage of IE8's
-	 * improved CSS support. 
+	 * improved CSS support.
 	 */
 	public void setUaCompatible(String uaCompatible) {
 		this.uaCompatible = uaCompatible;
 	}
-	
+
 	/**
 	 * Returns UA compatibility selection
-	 * 
+	 *
 	 * @see #setUaCompatible(String)
 	 */
 	public String getUaCompatible() {
 		return uaCompatible;
 	}
-	
+
 	/**
 	 * Sets the TinyMCE version to be used.
-	 * 
+	 *
 	 * The default version is 3.
-	 * 
+	 *
 	 * @param version must be 3 or 4
-	 * 
+	 *
 	 * @see WTextEdit
 	 */
 	public void setTinyMCEVersion(int version) {
@@ -882,7 +990,7 @@ public class Configuration {
 	public void setWebSocketsEnabled(boolean enabled) {
 		this.webSocketsEnabled = enabled;
 	}
-	
+
 	boolean webSockets() {
 		return webSocketsEnabled;
 	}
@@ -902,7 +1010,7 @@ public class Configuration {
 	boolean ajaxPuzzle() {
 		return false;
 	}
-	
+
 	/** Returns the maximum request size.
 	 */
 	public long getMaxRequestSize() {
@@ -948,7 +1056,7 @@ public class Configuration {
 	public void setBehindReverseProxy(boolean enabled) {
 		this.behindReverseProxy = enabled;
 	}
-	
+
 	/**
 	 * Returns whether we are deployment behind a reverse proxy.
 	 * When configured behind a reverse proxy, typical headers set
@@ -1032,7 +1140,7 @@ public class Configuration {
 	public int internalDeploymentSize() {
 		return internalDeploymentSize;
 	}
-	
+
 	public void setInternalDeploymentSize(int size) {
 		this.internalDeploymentSize = size;
     if (size == 0)
@@ -1057,6 +1165,14 @@ public class Configuration {
 	}
 
 	/**
+	 * Returns the headers configured to be sent with every HTTP
+	 * response.
+	 */
+	public List<HttpHeader> getHttpHeaders() {
+		return this.httpHeaders;
+	}
+
+	/**
 	 * Sets (static) meta headers. This is an alternative to using
 	 * {@link WApplication#addMetaHeader(String, CharSequence)}, but having the
 	 * benefit that they are added to all sessions.
@@ -1073,6 +1189,52 @@ public class Configuration {
 		this.headMatter = headMatter;
 	}
 
+	/**
+	 * Sets the headers to send with every HTTP response.
+	 */
+	public void setHttpHeaders(List<HttpHeader> httpHeaders) {
+		this.httpHeaders = httpHeaders;
+	}
+
+	/**
+	 * Configures whether nonces are used.
+	 *
+	 * Setting this to true forces every script HTML tag to have the
+	 * same nonce as the one given in the header of the reply in order
+	 * to be executed. This nonce is randomly generated for each reply,
+	 * helping to protect against XSS attacks.
+	 *
+	 * @see servlet.WebResponse#getNonce()
+	 */
+	public void setUseScriptNonce(boolean enable) {
+		this.useScriptNonce = enable;
+	}
+
+	/**
+	 * Returns whether nonces are used.
+	 */
+	public boolean isUseScriptNonce() {
+		return this.useScriptNonce;
+	}
+
+	/**
+	 * Configures whether the header X-Frame-Option "SAMEORIGIN" is
+	 * sent when serving the main page or the bootstrap.
+	 */
+	public void setUseXFrameSameOrigin(boolean enable) {
+		this.useXFrameSameOrigin = enable;
+	}
+
+	/**
+	 * Returns whether the header X-Frame-Option "SAMEORIGIN" is sent
+	 * when serving the main page or the bootstrap.
+	 *
+	 * @see #setUseXFrameSameOrigin(boolean)
+	 */
+	public boolean isUseXFrameSameOrigin() {
+		return this.useXFrameSameOrigin;
+	}
+
 	public boolean isAllowedOrigin(String origin) {
 		if (this.allowedOrigins_.size() == 1 &&
 			"*".equals(this.allowedOrigins_.iterator().next()))
@@ -1084,7 +1246,7 @@ public class Configuration {
 	/**
 	 * Sets the list of origins that are allowed for CORS
 	 * (only supported for WidgetSet entry points)
-	 * 
+	 *
 	 * The default is empty (no origins are allowed).
 	 */
 	public void setAllowedOrigins(Collection<String> origins) {

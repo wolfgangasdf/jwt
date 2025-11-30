@@ -6,6 +6,8 @@
 package eu.webtoolkit.jwt.render;
 
 import eu.webtoolkit.jwt.*;
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -390,7 +392,14 @@ class Block {
         double height = this.cssHeight(renderer.getFontScale());
         String src = this.attributeValue("src");
         if (width <= 0 || height <= 0) {
-          WPainter.Image image = new WPainter.Image(src, src);
+          WDataInfo imgInfo = new WDataInfo();
+          if (DataUri.isDataUri(src)) {
+            imgInfo.setDataUri(src);
+          } else {
+            imgInfo.setUrl(src);
+            imgInfo.setFilePath(src);
+          }
+          WPainter.Image image = new WPainter.Image(imgInfo);
           if (height <= 0) {
             height = image.getHeight();
           }
@@ -633,8 +642,15 @@ class Block {
       double width = bb.width;
       double height = bb.height;
       WRectF rect = new WRectF(left, top, width, height);
-      painter.drawImage(
-          rect, new WPainter.Image(this.attributeValue("src"), (int) width, (int) height));
+      String src = this.attributeValue("src");
+      WDataInfo imgInfo = new WDataInfo();
+      if (DataUri.isDataUri(src)) {
+        imgInfo.setDataUri(src);
+      } else {
+        imgInfo.setUrl(src);
+        imgInfo.setFilePath(src);
+      }
+      painter.drawImage(rect, new WPainter.Image(imgInfo, (int) width, (int) height));
     } else {
       LayoutBox bb = this.toBorderBox(lb, renderer.getFontScale());
       WRectF rect =
@@ -1853,7 +1869,14 @@ class Block {
             h = this.cssHeight(renderer.getFontScale());
             String src = this.attributeValue("src");
             if (w <= 0 || h <= 0) {
-              WPainter.Image image = new WPainter.Image(src, src);
+              WDataInfo imgInfo = new WDataInfo();
+              if (DataUri.isDataUri(src)) {
+                imgInfo.setDataUri(src);
+              } else {
+                imgInfo.setUrl(src);
+                imgInfo.setFilePath(src);
+              }
+              WPainter.Image image = new WPainter.Image(imgInfo);
               if (w <= 0) {
                 w = image.getWidth();
               }
@@ -2940,7 +2963,6 @@ class Block {
         } else {
           double x = rect.getLeft();
           int wordStart = 0;
-          double wordTotal = 0;
           for (int j = 0; j <= ib.utf8Count; ++j) {
             if (j == ib.utf8Count || isWhitespace(text.charAt(ib.utf8Pos + j))) {
               if (j > wordStart) {
@@ -2949,7 +2971,6 @@ class Block {
                         text.substring(
                             ib.utf8Pos + wordStart, ib.utf8Pos + wordStart + j - wordStart));
                 double wordWidth = device.measureText(word).getWidth();
-                wordTotal += wordWidth;
                 painter.drawText(
                     new WRectF(x, rect.getTop(), wordWidth, rect.getHeight()),
                     EnumSet.of(AlignmentFlag.Left, AlignmentFlag.Top),

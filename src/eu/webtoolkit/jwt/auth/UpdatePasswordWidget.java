@@ -6,6 +6,7 @@
 package eu.webtoolkit.jwt.auth;
 
 import eu.webtoolkit.jwt.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -128,13 +129,11 @@ public class UpdatePasswordWidget extends WTemplateFormView {
       result = new WLineEdit();
     } else {
       if (field == AuthModel.PasswordField) {
-        WLineEdit p = new WLineEdit();
-        p.setEchoMode(EchoMode.Password);
+        WPasswordEdit p = new WPasswordEdit();
         result = p;
       } else {
         if (field == RegistrationModel.ChoosePasswordField) {
-          WLineEdit p = new WLineEdit();
-          p.setEchoMode(EchoMode.Password);
+          WPasswordEdit p = new WPasswordEdit();
           p.keyWentUp()
               .addListener(
                   this,
@@ -150,8 +149,7 @@ public class UpdatePasswordWidget extends WTemplateFormView {
           result = p;
         } else {
           if (field == RegistrationModel.RepeatPasswordField) {
-            WLineEdit p = new WLineEdit();
-            p.setEchoMode(EchoMode.Password);
+            WPasswordEdit p = new WPasswordEdit();
             p.changed()
                 .addListener(
                     this,
@@ -207,7 +205,6 @@ public class UpdatePasswordWidget extends WTemplateFormView {
     if (this.validate()) {
       String password = this.registrationModel_.valueText(RegistrationModel.ChoosePasswordField);
       this.registrationModel_.getPasswordAuth().updatePassword(this.user_, password);
-      this.registrationModel_.getLogin().login(this.user_);
       this.updated_.trigger();
     }
   }

@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -451,6 +453,11 @@ public abstract class WAbstractArea extends WObject {
    */
   public EventSignal1<WMouseEvent> mouseWheel() {
     return this.widget_.mouseWheel();
+  }
+
+  public void setObjectName(final String name) {
+    this.widget_.setObjectName(name);
+    super.setObjectName(name);
   }
 
   WAbstractArea() {

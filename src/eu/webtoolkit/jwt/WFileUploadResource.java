@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -38,7 +40,14 @@ final class WFileUploadResource extends WResource {
     }
     response.setContentType("text/html; charset=utf-8");
     Writer o = response.out();
-    o.append("<!DOCTYPE html><html>\n<head><script type=\"text/javascript\">\nfunction load() { ");
+    o.append("<!DOCTYPE html>")
+        .append("<html>\n")
+        .append("<head><script")
+        .append(" type=\"text/javascript\"");
+    if (response.getNonce().length() != 0) {
+      o.append(" nonce=\"").append(response.getNonce()).append("\"");
+    }
+    o.append(">\n").append("function load() { ");
     if (triggerUpdate || 0 != 0) {
       UserAgent agent = WApplication.getInstance().getEnvironment().getAgent();
       if (triggerUpdate) {
@@ -82,7 +91,7 @@ final class WFileUploadResource extends WResource {
     } else {
       logger.debug(new StringWriter().append("Resource handleRequest(): no signal").toString());
     }
-    o.append("}\n</script></head><body onload=\"load();\"></body></html>");
+    o.append("}window.onload=function() { load(); };\n</script></head><body></body></html>");
     if (!(0 != 0) && !files.isEmpty()) {
       this.fileUpload_.setFiles(files);
     }

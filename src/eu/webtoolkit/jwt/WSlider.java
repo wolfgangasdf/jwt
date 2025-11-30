@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -76,6 +78,7 @@ public class WSlider extends WFormWidget {
     this.preferNative_ = false;
     this.changed_ = false;
     this.changedConnected_ = false;
+    this.inputConnected_ = false;
     this.handleWidth_ = 20;
     this.minimum_ = 0;
     this.maximum_ = 99;
@@ -113,6 +116,7 @@ public class WSlider extends WFormWidget {
     this.preferNative_ = false;
     this.changed_ = false;
     this.changedConnected_ = false;
+    this.inputConnected_ = false;
     this.handleWidth_ = 20;
     this.minimum_ = 0;
     this.maximum_ = 99;
@@ -539,6 +543,8 @@ public class WSlider extends WFormWidget {
   public void enableAjax() {
     if (this.paintedSlider_ != null) {
       this.paintedSlider_.connectSlots();
+    } else {
+      super.enableAjax();
     }
   }
 
@@ -683,7 +689,7 @@ public class WSlider extends WFormWidget {
         } else {
           if (!this.inputConnected_
               && (this.valueChanged_.isConnected() || this.sliderMoved_.isConnected())) {
-            this.changedConnected_ = true;
+            this.inputConnected_ = true;
             this.input()
                 .addListener(
                     this,

@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -604,23 +606,25 @@ class WTreeViewNode extends WContainerWidget {
 
   void updateDom(final DomElement element, boolean all) {
     if (this.view_.isDisabled()) {
-      this.addStyleClass("Wt-disabled");
-      this.nodeWidget_.addStyleClass("Wt-disabled");
+      WApplication app = WApplication.getInstance();
+      String themedDisabledClass = app != null ? app.getTheme().getDisabledClass() : "";
+      this.addStyleClass(themedDisabledClass);
+      this.nodeWidget_.addStyleClass(themedDisabledClass);
       WWidget widget = this.nodeWidget_.resolveWidget("cols-row");
       if (widget != null) {
-        widget.addStyleClass("Wt-disabled");
+        widget.addStyleClass(themedDisabledClass);
       }
       widget = this.nodeWidget_.resolveWidget("expand");
       if (widget != null) {
-        widget.addStyleClass("Wt-disabled");
+        widget.addStyleClass(themedDisabledClass);
       }
       widget = this.nodeWidget_.resolveWidget("no-expand");
       if (widget != null) {
-        widget.addStyleClass("Wt-disabled");
+        widget.addStyleClass(themedDisabledClass);
       }
       widget = this.nodeWidget_.resolveWidget("col0");
       if (widget != null) {
-        widget.addStyleClass("Wt-disabled");
+        widget.addStyleClass(themedDisabledClass);
       }
     }
     super.updateDom(element, all);

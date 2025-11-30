@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -30,11 +32,13 @@ public class WToolBar extends WCompositeWidget {
   /** Constructor. */
   public WToolBar(WContainerWidget parentContainer) {
     super();
+    this.flags_ = new BitSet();
     this.compact_ = true;
+    this.orientation_ = Orientation.Horizontal;
     this.lastGroup_ = null;
+    this.nextUnrenderedGroup_ = 0;
     this.widgets_ = new ArrayList<WWidget>();
     this.setImplementation(this.impl_ = new WContainerWidget());
-    this.setStyleClass("btn-group");
     if (parentContainer != null) parentContainer.addWidget(this);
   }
   /**
@@ -51,14 +55,15 @@ public class WToolBar extends WCompositeWidget {
    * <p>Use bootstrap btn-group-vertical style for vertical orientation.
    */
   public void setOrientation(Orientation orientation) {
-    if (orientation == Orientation.Vertical) {
-      this.addStyleClass("btn-group-vertical");
-    } else {
-      this.removeStyleClass("btn-group-vertical");
+    if (this.orientation_ != orientation) {
+      this.orientation_ = orientation;
+      this.flags_.set(BIT_ORIENTATION_CHANGED);
+      this.scheduleRender();
     }
   }
   /** Adds a button. */
-  public void addButton(WPushButton button, AlignmentFlag alignmentFlag) {
+  public WPushButton addButton(WPushButton button, AlignmentFlag alignmentFlag) {
+    WPushButton result = button;
     this.widgets_.add(button);
     if (this.compact_) {
       if (alignmentFlag == AlignmentFlag.Right) {
@@ -71,15 +76,16 @@ public class WToolBar extends WCompositeWidget {
       }
       this.getLastGroup().addWidget(button);
     }
+    return result;
   }
   /**
    * Adds a button.
    *
-   * <p>Calls {@link #addButton(WPushButton button, AlignmentFlag alignmentFlag) addButton(button,
+   * <p>Returns {@link #addButton(WPushButton button, AlignmentFlag alignmentFlag) addButton(button,
    * AlignmentFlag.Left)}
    */
-  public final void addButton(WPushButton button) {
-    addButton(button, AlignmentFlag.Left);
+  public final WPushButton addButton(WPushButton button) {
+    return addButton(button, AlignmentFlag.Left);
   }
   /**
    * Adds a split button.
@@ -91,7 +97,8 @@ public class WToolBar extends WCompositeWidget {
    *
    * @see WToolBar#setCompact(boolean compact)
    */
-  public void addButton(WSplitButton button, AlignmentFlag alignmentFlag) {
+  public WSplitButton addButton(WSplitButton button, AlignmentFlag alignmentFlag) {
+    WSplitButton result = button;
     this.widgets_.add(button);
     this.setCompact(false);
     this.lastGroup_ = null;
@@ -99,15 +106,16 @@ public class WToolBar extends WCompositeWidget {
       button.setAttributeValue("style", "float:right;");
     }
     this.impl_.addWidget(button);
+    return result;
   }
   /**
    * Adds a split button.
    *
-   * <p>Calls {@link #addButton(WSplitButton button, AlignmentFlag alignmentFlag) addButton(button,
-   * AlignmentFlag.Left)}
+   * <p>Returns {@link #addButton(WSplitButton button, AlignmentFlag alignmentFlag)
+   * addButton(button, AlignmentFlag.Left)}
    */
-  public final void addButton(WSplitButton button) {
-    addButton(button, AlignmentFlag.Left);
+  public final WSplitButton addButton(WSplitButton button) {
+    return addButton(button, AlignmentFlag.Left);
   }
   /**
    * Adds a widget.
@@ -132,7 +140,8 @@ public class WToolBar extends WCompositeWidget {
   public final void addWidget(WWidget widget) {
     addWidget(widget, AlignmentFlag.Left);
   }
-
+  // public Widget  addWidget(<Woow... some pseudoinstantiation type!> widget, AlignmentFlag
+  // alignmentFlag) ;
   public WWidget removeWidget(WWidget widget) {
     int idx = this.widgets_.indexOf(widget);
     if (idx != -1) {
@@ -142,6 +151,10 @@ public class WToolBar extends WCompositeWidget {
         {
           WWidget toRemove = WidgetUtils.remove(this.impl_, parent);
           if (toRemove != null) toRemove.remove();
+        }
+
+        if (this.lastGroup_ == parent) {
+          this.lastGroup_ = null;
         }
       }
       this.widgets_.remove(0 + idx);
@@ -185,7 +198,7 @@ public class WToolBar extends WCompositeWidget {
    * added by {@link WToolBar#addWidget(WWidget widget, AlignmentFlag alignmentFlag) addWidget()}.
    */
   public WWidget widget(int index) {
-    if (index < this.widgets_.size()) {
+    if (index < (int) this.widgets_.size()) {
       return this.widgets_.get(index);
     } else {
       return null;
@@ -205,20 +218,20 @@ public class WToolBar extends WCompositeWidget {
         if (this.impl_.getCount() > 0) {
           logger.info(new StringWriter().append("setCompact(true): not implemented").toString());
         }
-        this.setStyleClass("btn-group");
       } else {
-        this.setStyleClass("btn-toolbar");
         if (this.impl_.getCount() > 0) {
           WContainerWidget group = new WContainerWidget();
-          group.setStyleClass("btn-group me-2");
           while (this.impl_.getCount() > 0) {
             WWidget w = this.impl_.removeWidget(this.impl_.getWidget(0));
             group.addWidget(w);
           }
           this.lastGroup_ = group;
           this.impl_.addWidget(group);
+          this.flags_.set(BIT_MULTIPLE_GROUPS);
         }
       }
+      this.flags_.set(BIT_COMPACT_CHANGED);
+      this.scheduleRender();
     }
   }
   /**
@@ -232,16 +245,52 @@ public class WToolBar extends WCompositeWidget {
     return this.compact_;
   }
 
+  protected void render(EnumSet<RenderFlag> flags) {
+    boolean all = flags.contains(RenderFlag.Full);
+    if (this.isThemeStyleEnabled()) {
+      if (this.flags_.get(BIT_COMPACT_CHANGED) || all) {
+        if (this.compact_) {
+          this.removeStyleClass("btn-toolbar");
+          this.addStyleClass("btn-group");
+        } else {
+          this.removeStyleClass("btn-group");
+          this.addStyleClass("btn-toolbar");
+        }
+        this.flags_.clear(BIT_COMPACT_CHANGED);
+      }
+      if (this.flags_.get(BIT_MULTIPLE_GROUPS)) {
+        for (int i = this.nextUnrenderedGroup_; i < this.impl_.getCount(); ++i) {
+          this.impl_.getChildren().get(i).addStyleClass("btn-group me-2");
+        }
+        this.nextUnrenderedGroup_ = this.impl_.getCount();
+      }
+      if (this.flags_.get(BIT_ORIENTATION_CHANGED) || all) {
+        if (this.orientation_ == Orientation.Vertical) {
+          this.addStyleClass("btn-group-vertical");
+        } else {
+          this.removeStyleClass("btn-group-vertical");
+        }
+        this.flags_.clear(BIT_ORIENTATION_CHANGED);
+      }
+    }
+  }
+
+  private static final int BIT_COMPACT_CHANGED = 0;
+  private static final int BIT_ORIENTATION_CHANGED = 1;
+  private static final int BIT_MULTIPLE_GROUPS = 2;
+  private BitSet flags_;
   private boolean compact_;
+  private Orientation orientation_;
   private WContainerWidget impl_;
   private WContainerWidget lastGroup_;
+  private int nextUnrenderedGroup_;
   private List<WWidget> widgets_;
 
   private WContainerWidget getLastGroup() {
     if (!(this.lastGroup_ != null)) {
       this.lastGroup_ = new WContainerWidget();
       this.impl_.addWidget(this.lastGroup_);
-      this.lastGroup_.addStyleClass("btn-group me-2");
+      this.scheduleRender();
     }
     return this.lastGroup_;
   }

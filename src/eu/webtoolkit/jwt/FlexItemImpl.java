@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -43,6 +45,22 @@ class FlexItemImpl extends StdLayoutItemImpl implements WWidgetItemImpl {
       return 0;
     } else {
       return (int) this.item_.getWidget().getMinimumWidth().toPixels();
+    }
+  }
+
+  public int getMaximumHeight() {
+    if (this.item_.getWidget().isHidden()) {
+      return 0;
+    } else {
+      return (int) this.item_.getWidget().getMaximumHeight().toPixels();
+    }
+  }
+
+  public int getMaximumWidth() {
+    if (this.item_.getWidget().isHidden()) {
+      return 0;
+    } else {
+      return (int) this.item_.getWidget().getMaximumWidth().toPixels();
     }
   }
 

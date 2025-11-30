@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -154,6 +156,7 @@ public class WTreeNode extends WCompositeWidget {
       }
       this.labelIcon_.setState(this.isExpanded() ? 1 : 0);
     }
+    this.resetLearnedSlots();
   }
   /**
    * Inserts a child node.
@@ -842,10 +845,12 @@ public class WTreeNode extends WCompositeWidget {
         && this.getTree().isDisabled()
         && this.getTree().getTreeRoot() != null) {
       WTreeNode root = this.getTree().getTreeRoot();
+      WApplication app = WApplication.getInstance();
+      String themedDisabledClass = app != null ? app.getTheme().getDisabledClass() : "";
       for (WTreeNode node : root.getChildNodes()) {
-        if (!node.hasStyleClass("Wt-disabled")) {
-          node.addStyleClass("Wt-disabled");
-          node.getLabel().addStyleClass("Wt-disabled");
+        if (!node.hasStyleClass(themedDisabledClass)) {
+          node.addStyleClass(themedDisabledClass);
+          node.getLabel().addStyleClass(themedDisabledClass);
         }
       }
     }

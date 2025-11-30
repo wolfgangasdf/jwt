@@ -1,0 +1,13 @@
+# Do not allow bots to crawl resources in the widget gallery
+# Working at "deployment path": widgets
+User-agent: *
+Disallow: /widgets/widgets
+
+User-agent: *
+Disallow: /widgets/forms/widgets
+
+User-agent: *
+Disallow: /widgets/graphics-charts/widgets
+
+User-agent: *
+Disallow: /widgets/graphics-charts/icons/widgets

@@ -102,10 +102,17 @@
   <message id="Wt.WTimeValidator.TimeTooLate">The time must be before {1}</message>
   <message id="Wt.WTimeValidator.WrongTimeRange">The time must be between {1} and {2}</message>
   <message id="Wt.WTimeValidator.WrongFormat">Must be a time in the format '{1}'</message>
+  <message id="Wt.WTimeValidator.WrongStep">An invalid increment has been used</message>
+  <message id="Wt.WTimeValidator.WrongStep-seconds">The time must be an increment of {1} second(s)</message>
+  <message id="Wt.WTimeValidator.WrongStep-minutes">The time must be an increment of {1} minute(s)</message>
 
   <message id="Wt.WDefaultLoadingIndicator.Loading">Loading...</message>
 
   <message id="Wt.WDialog.template">
+    ${block:Wt.WDialog.template.default}
+  </message>
+
+  <message id="Wt.WDialog.template.default">
     ${center-script}
     ${layout}
   </message>
@@ -133,6 +140,9 @@
   <message id="Wt.WLengthValidator.TooShort">The input must be at least {1} characters</message>
   <message id="Wt.WLengthValidator.BadRange">The input must have a length between {1} and {2} characters</message>
   <message id="Wt.WLengthValidator.TooLong">The input must be no more than {1} characters</message>
+
+  <message id="Wt.WPasswordValidator.TooShort">The password is too short</message>
+  <message id="Wt.WPasswordValidator.TooLong">The password is too long</message>
 
   <message id="Wt.WMediaPlayer.play">Play</message>
   <message id="Wt.WMediaPlayer.pause">Pause</message>
@@ -240,14 +250,14 @@
   </message>
 
   <message id="Wt.WNavigationBar.template">
-    <div class="navbar-inner">
-      <div class="container">
-        ${collapse-button}
-        ${expand-button}
-        ${title-link}
-        ${contents}
-      </div>
-    </div>
+    ${block:Wt.WNavigationBar.template.default}
+  </message>
+
+  <message id="Wt.WNavigationBar.template.default">
+    ${collapse-button}
+    ${expand-button}
+    ${title-link}
+    ${contents}
   </message>
 
   <message id="Wt.WNavigationBar.expand-button">
@@ -273,6 +283,10 @@
   </message>
 
   <message id="Wt.WDialog.titlebar">
+    ${block:Wt.WDialog.titlebar.default}
+  </message>
+
+  <message id="Wt.WDialog.titlebar.default">
     <h4>${title}</h4>
   </message>
 </messages>

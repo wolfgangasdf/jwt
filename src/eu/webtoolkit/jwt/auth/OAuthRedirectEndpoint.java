@@ -6,6 +6,7 @@
 package eu.webtoolkit.jwt.auth;
 
 import eu.webtoolkit.jwt.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -91,7 +92,11 @@ final class OAuthRedirectEndpoint extends WResource {
     } else {
       String appJs = app.getJavaScriptClass();
       o.append(
-              "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\">\n<head><title></title>\n<script type=\"text/javascript\">\nfunction load() { if (window.opener.")
+          "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\">\n<head><title></title>\n<script type=\"text/javascript\"");
+      if (response.getNonce().length() != 0) {
+        o.append(" nonce=\"").append(response.getNonce()).append("\"");
+      }
+      o.append(">\nfunction load() { if (window.opener.")
           .append(appJs)
           .append(") {var ")
           .append(appJs)
@@ -99,7 +104,8 @@ final class OAuthRedirectEndpoint extends WResource {
           .append(appJs)
           .append(";")
           .append(this.process_.redirected_.createCall())
-          .append(";window.close();}\n}\n</script></head><body onload=\"load();\"></body></html>");
+          .append(
+              ";window.close();}\n}\nwindow.onload = function() { load(); };\n</script></head><body></body></html>");
     }
   }
 

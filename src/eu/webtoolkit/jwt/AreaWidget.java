@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -39,10 +41,15 @@ class AreaWidget extends WInteractWidget {
   void updateDom(final DomElement element, boolean all) {
     boolean needsUrlResolution = this.facade_.updateDom(element, all);
     super.updateDom(element, all);
-    if (element.getProperty(Property.StyleCursor).length() != 0
-        && !WApplication.getInstance().getEnvironment().agentIsGecko()
-        && element.getAttribute("href").length() == 0) {
-      element.setAttribute("href", "javascript:void(0);");
+    if (element.getAttribute("href").length() == 0) {
+      if (!WApplication.getInstance().getEnvironment().agentIsGecko()) {
+        element.setAttribute("href", "#");
+      }
+      element.addPropertyWord(Property.Class, WInteractWidget.noDefault);
+      List<String> styleClassesVector = Utils.getWidgetStyleClasses(this);
+      for (String className : styleClassesVector) {
+        element.addPropertyWord(Property.Class, className);
+      }
     }
     if (needsUrlResolution) {
       WAnchor.renderUrlResolution(this, element, all);

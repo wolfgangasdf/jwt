@@ -6,6 +6,8 @@
 package eu.webtoolkit.jwt.examples.widgetgallery;
 
 import eu.webtoolkit.jwt.*;
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -28,6 +30,13 @@ class TopicTemplate extends BaseTemplate {
     this.bindString("doc-url", "//www.webtoolkit.eu/jwt/latest/doc/javadoc/eu/webtoolkit/jwt/");
     this.namespaceToPackage.put("Chart", "chart");
     this.namespaceToPackage.put("Render", "render");
+    if (WApplication.getInstance().getTheme().getName().equals("bootstrap2")) {
+      this.bindString("dl-class", "dl-horizontal");
+      this.bindString("row", "row-fluid");
+    } else {
+      this.bindString("dl-class", "row");
+      this.bindString("row", "row");
+    }
     if (parentContainer != null) parentContainer.addWidget(this);
   }
 

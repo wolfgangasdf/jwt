@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -50,7 +52,7 @@ public class WEnvironment {
 
   /** Wt&apos;s JavaScript scope. */
   public static String getJavaScriptWtScope() {
-    return "Wt4_10_4";
+    return "Wt4_12_1";
   }
   /**
    * Parameters passed to the application.
@@ -251,7 +253,7 @@ public class WEnvironment {
    *
    * <p>
    *
-   * @see WApplication#setLocale(Locale locale)
+   * @see WApplication#setLocale(Locale locale, boolean doRefresh)
    */
   public Locale getLocale() {
     return this.locale_;
@@ -361,6 +363,44 @@ public class WEnvironment {
     return this.agent_ == UserAgent.BotAgent;
   }
   /**
+   * Returns whether the incoming request is treated like a bot.
+   *
+   * <p>This can be used to check whether an incoming request is likely to originate from a bot
+   * client. The request will be treated the same way as a normal bot.
+   *
+   * <p>Currently, this verifies whether a newly incoming GET request carries a <code>wtd</code>
+   * parameter. For a new request this should never be the case, unless this page was scraped
+   * before. The session would be expired by now, and this request should then not be valid.
+   *
+   * <p>
+   *
+   * <p><i><b>Note: </b>If a user were to get here, they would be served the same page a bot would
+   * see. This does not contain anything session-related. Once they would navigate on the page, they
+   * would be granted a new session, which will be tracked for subsequent requests. </i>
+   *
+   * @see WEnvironment#agentIsSpiderBot()
+   */
+  public boolean isLikelyBotGetRequest() {
+    return this.isLikelyBotGetRequest_;
+  }
+  /**
+   * Returns whether the request should be treated like a bot.
+   *
+   * <p>If the agent matches any of the agents configured as bots agents, or if the request is
+   * suspicious, the application will handle them as a bot.
+   *
+   * <p>These responses will not contain session related content, and their session will be quickly
+   * closed server-side.
+   *
+   * <p>
+   *
+   * @see WEnvironment#agentIsSpiderBot()
+   * @see WEnvironment#isLikelyBotGetRequest()
+   */
+  public boolean isTreatLikeBot() {
+    return this.agentIsSpiderBot() || this.isLikelyBotGetRequest();
+  }
+  /**
    * Returns the web server signature.
    *
    * <p>The value of the CGI variable <code>SERVER_SIGNATURE</code>.
@@ -445,7 +485,7 @@ public class WEnvironment {
    * <p>Example: <code>&quot;1.99.2&quot;</code>
    */
   public static String getLibraryVersion() {
-    return "4.10.4";
+    return "4.12.1";
   }
   // public void libraryVersion(final bad java simple ref int series, final bad java simple ref int
   // major, final bad java simple ref int minor) ;
@@ -652,6 +692,7 @@ public class WEnvironment {
   double dpiScale_;
   String queryString_;
   boolean webGLsupported_;
+  protected boolean isLikelyBotGetRequest_;
   Map<String, String[]> parameters_;
   Map<String, String> cookies_;
   Locale locale_;
@@ -680,6 +721,7 @@ public class WEnvironment {
     this.dpiScale_ = 1;
     this.queryString_ = "";
     this.webGLsupported_ = false;
+    this.isLikelyBotGetRequest_ = false;
     this.parameters_ = new HashMap<String, String[]>();
     this.cookies_ = new HashMap<String, String>();
     this.locale_ = new Locale("");
@@ -903,6 +945,7 @@ public class WEnvironment {
     this.dpiScale_ = 1;
     this.queryString_ = "";
     this.webGLsupported_ = false;
+    this.isLikelyBotGetRequest_ = false;
     this.parameters_ = new HashMap<String, String[]>();
     this.cookies_ = new HashMap<String, String>();
     this.locale_ = new Locale("");
@@ -922,7 +965,7 @@ public class WEnvironment {
     this.redirectSecret_ = "";
   }
 
-  void init(final WebRequest request) {
+  void init(final WebRequest request, final String sessionId) {
     final Configuration conf = this.session_.getController().getConfiguration();
     this.queryString_ = request.getQueryString();
     this.parameters_ = request.getParameterMap();
@@ -960,6 +1003,14 @@ public class WEnvironment {
       parseCookies(cookie, this.cookies_);
     }
     this.locale_ = request.getLocale();
+    String wtdE = request.getParameter("wtd");
+    String method = request.getRequestMethod();
+    this.isLikelyBotGetRequest_ =
+        wtdE != null
+            && !wtdE.equals(sessionId)
+            && method != null
+            && method.equals("GET")
+            && this.agentSupportsAjax();
   }
 
   void updateHostName(final WebRequest request) {

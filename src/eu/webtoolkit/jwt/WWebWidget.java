@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -46,6 +48,7 @@ public abstract class WWebWidget extends WWidget {
     this.otherImpl_ = null;
     this.flags_.set(BIT_INLINE);
     this.flags_.set(BIT_ENABLED);
+    this.flags_.set(BIT_TOOLTIP_SHOW_ON_HOVER);
     if (parentContainer != null) parentContainer.addWidget(this);
   }
   /**
@@ -360,7 +363,9 @@ public abstract class WWebWidget extends WWidget {
   }
 
   public void setDisabled(boolean disabled) {
-    if (canOptimizeUpdates() && disabled == this.flags_.get(BIT_DISABLED)) {
+    if (canOptimizeUpdates()
+        && disabled == this.flags_.get(BIT_DISABLED)
+        && !this.flags_.get(BIT_PARENT_CHANGED)) {
       return;
     }
     boolean wasEnabled = this.isEnabled();
@@ -573,6 +578,55 @@ public abstract class WWebWidget extends WWidget {
 
   public WString getToolTip() {
     return this.getStoredToolTip();
+  }
+  /**
+   * Enable/disable whether tooltip is shown on hover.
+   *
+   * <p>Allow to enable or disable whether the tooltip is shown when the {@link WWebWidget} is
+   * hovered over by the mouse.
+   *
+   * <p>
+   *
+   * @see WWebWidget#showToolTip()
+   * @see WWebWidget#hideToolTip()
+   */
+  public void showToolTipOnHover(boolean enable) {
+    if (enable) {
+      this.flags_.set(BIT_TOOLTIP_SHOW_ON_HOVER);
+    } else {
+      this.flags_.clear(BIT_TOOLTIP_SHOW_ON_HOVER);
+      this.flags_.set(BIT_TOOLTIP_CLEAN_FORCE_SHOW);
+    }
+    this.flags_.set(BIT_TOOLTIP_CHANGED);
+    this.repaint();
+  }
+  /**
+   * Force tooltip to show.
+   *
+   * <p>When called, show the tooltip to the user until {@link WWebWidget#hideToolTip()
+   * hideToolTip()} is called.
+   *
+   * <p>
+   *
+   * @see WWebWidget#hideToolTip()
+   */
+  public void showToolTip() {
+    this.flags_.set(BIT_TOOLTIP_FORCE_SHOW);
+    this.flags_.set(BIT_TOOLTIP_CHANGED);
+    this.repaint();
+  }
+  /**
+   * Hide the tooltip.
+   *
+   * <p>
+   *
+   * @see WWebWidget#showToolTip()
+   */
+  public void hideToolTip() {
+    this.flags_.clear(BIT_TOOLTIP_FORCE_SHOW);
+    this.flags_.set(BIT_TOOLTIP_CHANGED);
+    this.flags_.set(BIT_TOOLTIP_CLEAN_FORCE_SHOW);
+    this.repaint();
   }
 
   public void refresh() {
@@ -817,7 +871,7 @@ public abstract class WWebWidget extends WWidget {
     if (app.getEnvironment().hasJavaScript()) {
       stub.setProperty(Property.InnerHTML, "...");
     }
-    if (!app.getEnvironment().agentIsSpiderBot() || this.id_ != null) {
+    if (!app.getEnvironment().isTreatLikeBot() || this.id_ != null) {
       stub.setId(this.getId());
     }
     return stub;
@@ -1269,13 +1323,13 @@ public abstract class WWebWidget extends WWidget {
       if (this.layoutImpl_ != null) {
         if (this.layoutImpl_.zIndex_ > 0) {
           element.setProperty(Property.StyleZIndex, String.valueOf(this.layoutImpl_.zIndex_));
-          element.addPropertyWord(Property.Class, "Wt-popup");
           if (!all
               && !this.flags_.get(BIT_STYLECLASS_CHANGED)
               && this.lookImpl_ != null
               && this.lookImpl_.styleClass_.length() != 0) {
-            element.addPropertyWord(Property.Class, this.lookImpl_.styleClass_);
+            element.addPropertyWords(Property.Class, this.lookImpl_.styleClass_);
           }
+          element.addPropertyWord(Property.Class, "Wt-popup");
           if (!(app != null)) {
             app = WApplication.getInstance();
           }
@@ -1292,7 +1346,7 @@ public abstract class WWebWidget extends WWidget {
             app.addAutoJavaScript(
                 "{var w = "
                     + this.getJsRef()
-                    + ";if (w && !Wt4_10_4.isHidden(w)) {var i = Wt4_10_4.getElement('"
+                    + ";if (w && !Wt4_12_1.isHidden(w)) {var i = Wt4_12_1.getElement('"
                     + i.getId()
                     + "');i.style.width=w.clientWidth + 'px';i.style.height=w.clientHeight + 'px';}}");
             element.addChild(i);
@@ -1473,7 +1527,9 @@ public abstract class WWebWidget extends WWidget {
             app = WApplication.getInstance();
           }
           if ((this.lookImpl_.toolTipTextFormat_ != TextFormat.Plain
-                  || this.flags_.get(BIT_TOOLTIP_DEFERRED))
+                  || this.flags_.get(BIT_TOOLTIP_DEFERRED)
+                  || this.flags_.get(BIT_TOOLTIP_FORCE_SHOW)
+                  || this.flags_.get(BIT_TOOLTIP_CLEAN_FORCE_SHOW))
               && app.getEnvironment().hasAjax()) {
             app.loadJavaScript("js/ToolTip.js", wtjs10());
             WString tooltipText = new WString(this.lookImpl_.toolTip_.toString());
@@ -1487,16 +1543,26 @@ public abstract class WWebWidget extends WWidget {
                 }
               }
             }
+            boolean jsShowOnHover =
+                this.flags_.get(BIT_TOOLTIP_SHOW_ON_HOVER)
+                    && (this.flags_.get(BIT_TOOLTIP_DEFERRED)
+                        || this.lookImpl_.toolTipTextFormat_ != TextFormat.Plain);
             String deferred = this.flags_.get(BIT_TOOLTIP_DEFERRED) ? "true" : "false";
+            String showOnHover = jsShowOnHover ? "true" : "false";
+            String forceShow = this.flags_.get(BIT_TOOLTIP_FORCE_SHOW) ? "true" : "false";
             element.callJavaScript(
-                "Wt4_10_4.toolTip("
+                "Wt4_12_1.toolTip("
                     + app.getJavaScriptClass()
                     + ","
                     + jsStringLiteral(this.getId())
                     + ","
                     + WString.toWString(tooltipText).getJsStringLiteral()
                     + ", "
+                    + forceShow
+                    + ", "
                     + deferred
+                    + ", "
+                    + showOnHover
                     + ", "
                     + jsStringLiteral(
                         app.getTheme().utilityCssClass(UtilityCssClassRole.ToolTipInner))
@@ -1512,9 +1578,20 @@ public abstract class WWebWidget extends WWidget {
                     WWebWidget.this.loadToolTip();
                   });
             }
-            element.removeAttribute("title");
+            if (this.flags_.get(BIT_TOOLTIP_SHOW_ON_HOVER)
+                && !jsShowOnHover
+                && !this.flags_.get(BIT_TOOLTIP_FORCE_SHOW)) {
+              element.setAttribute("title", this.lookImpl_.toolTip_.toString());
+            } else {
+              element.removeAttribute("title");
+            }
+            this.flags_.clear(BIT_TOOLTIP_CLEAN_FORCE_SHOW);
           } else {
-            element.setAttribute("title", this.lookImpl_.toolTip_.toString());
+            if (this.flags_.get(BIT_TOOLTIP_SHOW_ON_HOVER)) {
+              element.setAttribute("title", this.lookImpl_.toolTip_.toString());
+            } else {
+              element.removeAttribute("title");
+            }
           }
         }
         this.flags_.clear(BIT_TOOLTIP_CHANGED);
@@ -1524,7 +1601,7 @@ public abstract class WWebWidget extends WWidget {
       }
       if (all || this.flags_.get(BIT_STYLECLASS_CHANGED)) {
         if (!all || this.lookImpl_.styleClass_.length() != 0) {
-          element.addPropertyWord(Property.Class, this.lookImpl_.styleClass_);
+          element.addPropertyWords(Property.Class, this.lookImpl_.styleClass_);
         }
       }
       this.flags_.clear(BIT_STYLECLASS_CHANGED);
@@ -1532,7 +1609,7 @@ public abstract class WWebWidget extends WWidget {
     if (!all && this.transientImpl_ != null) {
       for (int i = 0; i < this.transientImpl_.addedStyleClasses_.size(); ++i) {
         element.callJavaScript(
-            "Wt4_10_4.$('"
+            "Wt4_12_1.$('"
                 + this.getId()
                 + "').classList.add('"
                 + this.transientImpl_.addedStyleClasses_.get(i)
@@ -1540,7 +1617,7 @@ public abstract class WWebWidget extends WWidget {
       }
       for (int i = 0; i < this.transientImpl_.removedStyleClasses_.size(); ++i) {
         element.callJavaScript(
-            "Wt4_10_4.$('"
+            "Wt4_12_1.$('"
                 + this.getId()
                 + "').classList.remove('"
                 + this.transientImpl_.removedStyleClasses_.get(i)
@@ -1552,7 +1629,7 @@ public abstract class WWebWidget extends WWidget {
           for (int i = 0; i < this.transientImpl_.childRemoveChanges_.size(); ++i) {
             final String js = this.transientImpl_.childRemoveChanges_.get(i);
             if (js.charAt(0) == '_') {
-              element.callJavaScript("Wt4_10_4.remove('" + js.substring(1) + "');", true);
+              element.callJavaScript("Wt4_12_1.remove('" + js.substring(1) + "');", true);
             } else {
               element.callJavaScript(js, true);
             }
@@ -1574,12 +1651,26 @@ public abstract class WWebWidget extends WWidget {
       if (this.flags_.get(BIT_SET_UNSELECTABLE)) {
         element.addPropertyWord(Property.Class, "unselectable");
         element.setAttribute("unselectable", "on");
-        element.setAttribute("onselectstart", "return false;");
+        StringBuilder selectJS = new StringBuilder();
+        selectJS
+            .append("Wt4_12_1")
+            .append(".$('")
+            .append(this.getId())
+            .append("').onselectstart = ")
+            .append("function() { return false; };");
+        WApplication.getInstance().doJavaScript(selectJS.toString());
       } else {
         if (this.flags_.get(BIT_SET_SELECTABLE)) {
           element.addPropertyWord(Property.Class, "selectable");
           element.setAttribute("unselectable", "off");
-          element.setAttribute("onselectstart", "event.cancelBubble=true; return true;");
+          StringBuilder selectJS = new StringBuilder();
+          selectJS
+              .append("Wt4_12_1")
+              .append(".$('")
+              .append(this.getId())
+              .append("').onselectstart = ")
+              .append("function() { event.cancelBubble=true; return false; };");
+          WApplication.getInstance().doJavaScript(selectJS.toString());
         }
       }
       this.flags_.clear(BIT_SELECTABLE_CHANGED);
@@ -1652,7 +1743,7 @@ public abstract class WWebWidget extends WWidget {
     if (this.flags_.get(BIT_HIDE_WITH_VISIBILITY)) {
       if (this.flags_.get(BIT_HIDDEN_CHANGED) || all && this.flags_.get(BIT_HIDDEN)) {
         if (this.flags_.get(BIT_HIDDEN)) {
-          element.callJavaScript("Wt4_10_4.$('" + this.getId() + "').classList.add('Wt-hidden');");
+          element.callJavaScript("Wt4_12_1.$('" + this.getId() + "').classList.add('Wt-hidden');");
           element.setProperty(Property.StyleVisibility, "hidden");
           if (this.flags_.get(BIT_HIDE_WITH_OFFSETS)) {
             element.setProperty(Property.StylePosition, "absolute");
@@ -1693,7 +1784,7 @@ public abstract class WWebWidget extends WWidget {
             }
           }
           element.callJavaScript(
-              "Wt4_10_4.$('" + this.getId() + "').classList.remove('Wt-hidden');");
+              "Wt4_12_1.$('" + this.getId() + "').classList.remove('Wt-hidden');");
           element.setProperty(Property.StyleVisibility, "visible");
         }
       }
@@ -1708,7 +1799,7 @@ public abstract class WWebWidget extends WWidget {
         app.loadJavaScript(THIS_JS, wtjs2());
         if (!this.flags_.get(BIT_HIDE_WITH_VISIBILITY)) {
           StringBuilder ss = new StringBuilder();
-          ss.append("Wt4_10_4")
+          ss.append("Wt4_12_1")
               .append(".animateDisplay(")
               .append(app.getJavaScriptClass())
               .append(",'")
@@ -1730,7 +1821,7 @@ public abstract class WWebWidget extends WWidget {
           }
         } else {
           StringBuilder ss = new StringBuilder();
-          ss.append("Wt4_10_4")
+          ss.append("Wt4_12_1")
               .append(".animateVisible('")
               .append(this.getId())
               .append("',")
@@ -1797,13 +1888,13 @@ public abstract class WWebWidget extends WWidget {
       if (!app.isJavaScriptLoaded(SCROLL_JS) && this.isScrollVisibilityEnabled()) {
         app.loadJavaScript(SCROLL_JS, wtjs3());
         StringBuilder ss = new StringBuilder();
-        ss.append("if (!Wt4_10_4.scrollVisibility) {Wt4_10_4.scrollVisibility = new ");
-        ss.append("Wt4_10_4.ScrollVisibility(").append(app.getJavaScriptClass() + "); }");
+        ss.append("if (!Wt4_12_1.scrollVisibility) {Wt4_12_1.scrollVisibility = new ");
+        ss.append("Wt4_12_1.ScrollVisibility(").append(app.getJavaScriptClass() + "); }");
         element.callJavaScript(ss.toString());
       }
       if (this.isScrollVisibilityEnabled()) {
         StringBuilder ss = new StringBuilder();
-        ss.append("Wt4_10_4.scrollVisibility.add({");
+        ss.append("Wt4_12_1.scrollVisibility.add({");
         ss.append("el:").append(this.getJsRef()).append(',');
         ss.append("margin:").append(this.getScrollVisibilityMargin()).append(',');
         ss.append("visible:").append(this.isScrollVisible());
@@ -1813,7 +1904,7 @@ public abstract class WWebWidget extends WWidget {
       } else {
         if (this.flags_.get(BIT_SCROLL_VISIBILITY_LOADED)) {
           element.callJavaScript(
-              "Wt4_10_4.scrollVisibility.remove(" + jsStringLiteral(this.getId()) + ");");
+              "Wt4_12_1.scrollVisibility.remove(" + jsStringLiteral(this.getId()) + ");");
           this.flags_.clear(BIT_SCROLL_VISIBILITY_LOADED);
         }
       }
@@ -1859,6 +1950,7 @@ public abstract class WWebWidget extends WWidget {
     this.flags_.clear(BIT_TABINDEX_CHANGED);
     this.flags_.clear(BIT_SCROLL_VISIBILITY_CHANGED);
     this.flags_.clear(BIT_OBJECT_NAME_CHANGED);
+    this.flags_.clear(BIT_PARENT_CHANGED);
     this.renderOk();
     if (deep) {
       this.iterateChildren(
@@ -1877,7 +1969,7 @@ public abstract class WWebWidget extends WWidget {
     final StringBuilder result = new StringBuilder();
     if (this.isRendered() && this.isScrollVisibilityEnabled()) {
       result
-          .append("Wt4_10_4.scrollVisibility.remove(")
+          .append("Wt4_12_1.scrollVisibility.remove(")
           .append(jsStringLiteral(this.getId()))
           .append(");");
       this.flags_.set(BIT_SCROLL_VISIBILITY_CHANGED);
@@ -1891,13 +1983,16 @@ public abstract class WWebWidget extends WWidget {
       if ((result.length() == 0)) {
         result.append("_").append(this.getId());
       } else {
-        result.append("Wt4_10_4.remove('").append(this.getId()).append("');");
+        result.append("Wt4_12_1.remove('").append(this.getId()).append("');");
       }
     }
     return result.toString();
   }
 
   protected void propagateSetEnabled(final boolean enabled) {
+    WApplication app = WApplication.getInstance();
+    String disabledClass = app.getTheme().getDisabledClass();
+    this.toggleStyleClass(disabledClass, !enabled, true);
     this.iterateChildren(
         (WWidget c) -> {
           if (!c.isDisabled()) {
@@ -2048,7 +2143,7 @@ public abstract class WWebWidget extends WWidget {
 
   private static final int BIT_INLINE = 0;
   private static final int BIT_HIDDEN = 1;
-  private static final int BIT_LOADED = 2;
+  static final int BIT_LOADED = 2;
   private static final int BIT_RENDERED = 3;
   private static final int BIT_STUBBED = 4;
   private static final int BIT_FORM_OBJECT = 5;
@@ -2084,6 +2179,10 @@ public abstract class WWebWidget extends WWidget {
   private static final int BIT_SCROLL_VISIBILITY_CHANGED = 35;
   private static final int BIT_THEME_STYLE_DISABLED = 36;
   private static final int BIT_OBJECT_NAME_CHANGED = 37;
+  private static final int BIT_PARENT_CHANGED = 38;
+  private static final int BIT_TOOLTIP_FORCE_SHOW = 39;
+  private static final int BIT_TOOLTIP_CLEAN_FORCE_SHOW = 40;
+  private static final int BIT_TOOLTIP_SHOW_ON_HOVER = 41;
   private static String FOCUS_SIGNAL = "focus";
   private static String BLUR_SIGNAL = "blur";
   private static final int DEFAULT_BASE_Z_INDEX = 1100;
@@ -2507,10 +2606,14 @@ public abstract class WWebWidget extends WWidget {
   }
 
   protected void setParentWidget(WWidget parent) {
+    this.flags_.set(BIT_PARENT_CHANGED, parent != this.getParent());
     super.setParentWidget(parent);
     if (parent != null) {
       if (this.isPopup()) {
         this.calcZIndex();
+      }
+      if (!this.isDisabled()) {
+        this.propagateSetEnabled(parent.isEnabled());
       }
     }
   }
@@ -2529,7 +2632,7 @@ public abstract class WWebWidget extends WWidget {
   }
 
   void setId(DomElement element, WApplication app) {
-    if (!app.getEnvironment().agentIsSpiderBot() || this.id_ != null) {
+    if (!app.getEnvironment().isTreatLikeBot() || this.id_ != null) {
       if (!this.flags_.get(BIT_FORM_OBJECT)) {
         element.setId(this.getId());
       } else {
@@ -2685,7 +2788,7 @@ public abstract class WWebWidget extends WWidget {
         JavaScriptScope.WtClassScope,
         JavaScriptObjectType.JavaScriptFunction,
         "animateDisplay",
-        "(function(t,n,i,s,e,o){const a=t.WT;!function n(i,s,e,o,r){const c=0,d=1,l=2,p=3,f=4,m=5,h=256,u=[\"ease\",\"linear\",\"ease-in\",\"ease-out\",\"ease-in-out\"],y=[0,1,3,2,4,5],g=document.getElementById(i),w=1===g.childElementCount?g.firstElementChild:null;function b(t,n,i){for(const s of Object.keys(n)){i&&void 0===i[s]&&(i[s]=t.style[s]);t.style[s]=n[s]}}const x=b;if((()=>{const t={},n=a.css(g,\"display\");b(g,{display:r},t);const i=a.css(g,\"display\");x(g,t);return n!==i})()){const A=g.parentNode;if(A.wtAnimateChild){A.wtAnimateChild(a,g,s,e,o,{display:r});return}if(g.classList.contains(\"animating\")){Promise.all(g.getAnimations().map((t=>t.finished))).then((()=>{n(i,s,e,o,r)}));return}g.classList.add(\"animating\");const C=255&s,v=\"none\"===r,R={},$={},_={duration:o,iterations:1,easing:u[v?y[e]:e]};function E(){g.wtAnimatedHidden&&g.wtAnimatedHidden(v);0===g.getAnimations().length&&g.classList.remove(\"animating\");t.layouts2&&t.layouts2.setElementDirty(g)}function B(){g.style.display=r;g.wtPosition&&g.wtPosition();window.onshow&&window.onshow()}function T(t,n,i,e){v||B();const o=a.px(g,t),c={transform:`translate${e}(${(a.px(g,n)+o)*(i?-1:1)}px)`},d={transform:`translate${e}(0px)`};if(s&h){c.opacity=0;d.opacity=1}const l=v?[d,c]:[c,d];g.animate(l,_).finished.then((()=>{v&&(g.style.display=r);E()}))}function W(){v||B();const t={},n={};switch(C){case m:b(g,{transformOrigin:\"50% 50%\"},R);t.transform=\"scale(.2)\";n.transform=\"scale(1)\";break;case l:t.transform=\"translateX(100%)\";n.transform=\"translateX(0)\";break;case d:t.transform=\"translateX(-100%)\";n.transform=\"translateX(0)\"}if(s&h){t.opacity=0;n.opacity=a.css(g,\"opacity\")}const i=v?[n,t]:[t,n];g.animate(i,_).finished.then((()=>{v&&(g.style.display=r);x(g,R);E()}))}const k=[\"absolute\",\"fixed\"].includes(a.css(g,\"position\"));switch(C){case f:case p:k?T(\"height\",C===f?\"top\":\"bottom\",C===f,\"Y\"):function(){v||B();b(g,{overflow:\"hidden\"},R);const t=[],n=(()=>{if(!w)return null;const t=g.getBoundingClientRect(),n=w.getBoundingClientRect();return{left:n.x-t.x-a.px(g,\"border-left-width\"),top:n.y-t.y-a.px(g,\"border-top-width\")}})();if(w&&C===f){const n={transform:\"translateY(0px)\"},i={transform:`translateY(-${g.clientHeight}px)`},s=v?[n,i]:[i,n];t.push(w.animate(s,_))}{const n={height:\"0px\",paddingTop:\"0px\",paddingBottom:\"0px\",borderTopWidth:\"0px\",borderBottomWidth:\"0px\"},i={height:a.css(g,\"height\"),paddingTop:a.css(g,\"padding-top\"),paddingBottom:a.css(g,\"padding-bottom\"),borderTopWidth:a.css(g,\"border-top-width\"),borderBottomWidth:a.css(g,\"border-bottom-width\")};if(s&h){n.opacity=0;i.opacity=1}const e=v?[i,n]:[n,i];t.push(g.animate(e,_))}if(w){b(g,{position:\"relative\"},R);const t={position:\"absolute\",left:`${n.left}px`,top:`${n.top}px`};b(w,t,$)}Promise.all(t.map((t=>t.finished))).then((()=>{v&&(g.style.display=r);x(g,R);x(w,$);E()}))}();break;case d:case l:k?T(\"width\",C===d?\"left\":\"right\",C===d,\"X\"):W();break;case c:case m:W()}}}(n,i,s,e,o)})");
+        "(function(t,n,i,o,e,s){const a=t.WT;!function n(i,o,e,s,r){const d={None:0,SlideInFromLeft:1,SlideInFromRight:2,SlideInFromBottom:3,SlideInFromTop:4,Pop:5,Fade:256},l=[\"ease\",\"linear\",\"ease-in\",\"ease-out\",\"ease-in-out\"],c=[0,1,3,2,4,5],p=document.getElementById(i),m=1===p.childElementCount?p.firstElementChild:null;function f(t,n,i){for(const o of Object.keys(n)){i&&void 0===i[o]&&(i[o]=t.style[o]);t.style[o]=n[o]}}const h=f;if((()=>{const t={},n=a.css(p,\"display\");f(p,{display:r},t);const i=a.css(p,\"display\");h(p,t);return n!==i})()){const F=p.parentNode;if(F.wtAnimateChild){F.wtAnimateChild(a,p,o,e,s,{display:r});return}if(p.classList.contains(\"animating\")){Promise.all(p.getAnimations().map((t=>t.finished))).then((()=>{n(i,o,e,s,r)}));return}p.classList.add(\"animating\");const b=255&o,x=\"none\"===r,S={},I={},T={duration:s,iterations:1,easing:l[x?c[e]:e]};function u(){p.wtAnimatedHidden&&p.wtAnimatedHidden(x);0===p.getAnimations().length&&p.classList.remove(\"animating\");t.layouts2&&t.layouts2.setElementDirty(p)}function y(){p.style.display=r;p.wtPosition&&p.wtPosition();window.onshow&&window.onshow()}function g(t,n,i,e){x||y();const s=a.px(p,t),l={transform:`translate${e}(${(a.px(p,n)+s)*(i?-1:1)}px)`},c={transform:`translate${e}(0px)`};if(o&d.Fade){l.opacity=0;c.opacity=1}const m=x?[c,l]:[l,c];p.animate(m,T).finished.then((()=>{x&&(p.style.display=r);u()}))}function w(){x||y();const t={},n={};switch(b){case d.Pop:f(p,{transformOrigin:\"50% 50%\"},S);t.transform=\"scale(.2)\";n.transform=\"scale(1)\";break;case d.SlideInFromRight:t.transform=\"translateX(100%)\";n.transform=\"translateX(0)\";break;case d.SlideInFromLeft:t.transform=\"translateX(-100%)\";n.transform=\"translateX(0)\"}if(o&d.Fade){t.opacity=0;n.opacity=a.css(p,\"opacity\")}const i=x?[n,t]:[t,n];p.animate(i,T).finished.then((()=>{x&&(p.style.display=r);h(p,S);u()}))}const E=[\"absolute\",\"fixed\"].includes(a.css(p,\"position\"));switch(b){case d.SlideInFromTop:case d.SlideInFromBottom:E?g(\"height\",b===d.SlideInFromTop?\"top\":\"bottom\",b===d.SlideInFromTop,\"Y\"):function(){x||y();f(p,{overflow:\"hidden\"},S);const t=[],n=(()=>{if(!m)return null;const t=p.getBoundingClientRect(),n=m.getBoundingClientRect();return{left:n.x-t.x-a.px(p,\"border-left-width\"),top:n.y-t.y-a.px(p,\"border-top-width\")}})();if(m&&b===d.SlideInFromTop){const n={transform:\"translateY(0px)\"},i={transform:`translateY(-${p.clientHeight}px)`},o=x?[n,i]:[i,n];t.push(m.animate(o,T))}{const n={height:\"0px\",paddingTop:\"0px\",paddingBottom:\"0px\",borderTopWidth:\"0px\",borderBottomWidth:\"0px\"},i={height:a.css(p,\"height\"),paddingTop:a.css(p,\"padding-top\"),paddingBottom:a.css(p,\"padding-bottom\"),borderTopWidth:a.css(p,\"border-top-width\"),borderBottomWidth:a.css(p,\"border-bottom-width\")};if(o&d.Fade){n.opacity=0;i.opacity=1}const e=x?[i,n]:[n,i];t.push(p.animate(e,T))}if(m){f(p,{position:\"relative\"},S);const t={position:\"absolute\",left:`${n.left}px`,top:`${n.top}px`,width:`${m.clientWidth}px`};f(m,t,I)}Promise.all(t.map((t=>t.finished))).then((()=>{x&&(p.style.display=r);h(p,S);h(m,I);u()}))}();break;case d.SlideInFromLeft:case d.SlideInFromRight:E?g(\"width\",b===d.SlideInFromLeft?\"left\":\"right\",b===d.SlideInFromLeft,\"X\"):w();break;case d.None:case d.Pop:w()}}}(n,i,o,e,s)})");
   }
 
   static WJavaScriptPreamble wtjs2() {
@@ -2693,7 +2796,7 @@ public abstract class WWebWidget extends WWidget {
         JavaScriptScope.WtClassScope,
         JavaScriptObjectType.JavaScriptFunction,
         "animateVisible",
-        "(function(t,n,i,s,e,o,a,r){})");
+        "(function(t,n,i,o,e,s,a,r){})");
   }
 
   static WJavaScriptPreamble wtjs10() {
@@ -2701,7 +2804,7 @@ public abstract class WWebWidget extends WWidget {
         JavaScriptScope.WtClassScope,
         JavaScriptObjectType.JavaScriptFunction,
         "toolTip",
-        "(function(e,t,n,o,l,i){const c=document.getElementById(t),u=e.WT,a=c.toolTip;a||(c.toolTip=new function(){let a=null,s=null,d=null,r=null;let m=!1,T=n,f=!1;this.setToolTipText=function(e){T=e;if(m){this.showToolTip();clearTimeout(a);m=!1}};this.showToolTip=function(){!o||T||m||function(){m=!0;e.emit(c,\"Wt-loadToolTip\")}();if(T){r=document.createElement(\"div\");r.className=l;r.innerHTML=T;const e=document.createElement(\"div\");e.className=i;document.body.appendChild(e);e.appendChild(r);const t=d.x,n=d.y;u.fitToWindow(e,t+10,n+10,t-10,n-10);let o=0;const c=parseInt(u.css(e,\"zIndex\"),10);document.querySelectorAll(\".Wt-dialog, .modal, .modal-dialog\").forEach((function(t){o=Math.max(o,parseInt(u.css(t,\"zIndex\"),10));if(o>c){const t=o+1e3;e.style.zIndex=t}}));r.addEventListener(\"mouseenter\",(function(){f=!0}));r.addEventListener(\"mouseleave\",(function(){f=!1}))}clearInterval(s);s=null;s=setInterval((function(){document.querySelectorAll(`#${t}:hover`).length||p()}),200)};function p(){clearTimeout(a);setTimeout((function(){if(!f&&r){r.parentElement.remove();r=null;clearInterval(s);s=null}}),200)}function v(e){clearTimeout(a);d=u.pageCoordinates(e);r||(a=setTimeout((function(){c.toolTip.showToolTip()}),500))}c.addEventListener(\"mouseenter\",v);c.addEventListener(\"mousemove\",v);c.addEventListener(\"mouseleave\",p)});a&&a.setToolTipText(n)})");
+        "(function(e,t,o,n,i,l,s,c){const a=document.getElementById(t),u=e.WT,d=a.toolTip;d||(a.toolTip=new function(){let d=null,f=null,r=null,T=null;const m=10,p=200;let h=!1,v=o,E=n,I=l,y=!1;this.setToolTipText=function(e){v=e;if(h||E){this.showToolTip();clearTimeout(d);h=!1}};this.setVisibilityParams=function(e,t){E=e;I=t;W()};this.showToolTip=function(){if(I||E){!i||v||h||function(){h=!0;e.emit(a,\"Wt-loadToolTip\")}();if(v){W();T=document.createElement(\"div\");T.className=s;T.innerHTML=v;const e=document.createElement(\"div\");e.className=c;document.body.appendChild(e);e.appendChild(T);if(E){const t=a.offsetLeft+a.offsetWidth/2,o=a.offsetTop+a.offsetHeight;u.fitToWindow(e,t+m,o+20,t-m,o)}else{const t=r.x,o=r.y;u.fitToWindow(e,t+m,o+m,t-m,o-m)}let t=0;const o=parseInt(u.css(e,\"zIndex\"),10);document.querySelectorAll(\".Wt-dialog, .modal, .modal-dialog\").forEach((function(n){t=Math.max(t,parseInt(u.css(n,\"zIndex\"),10));if(t>o){const o=t+1e3;e.style.zIndex=o}}));T.addEventListener(\"mouseenter\",(function(){y=!0}));T.addEventListener(\"mouseleave\",(function(){y=!1}))}clearInterval(f);f=null;f=setInterval((function(){document.querySelectorAll(`#${t}:hover`).length||L()}),200)}};function L(){clearTimeout(d);setTimeout((function(){y&&I||E||W()}),p)}function W(){if(T){T.parentElement.remove();T=null;clearInterval(f);f=null;y=!1}}function w(e){clearTimeout(d);r=u.pageCoordinates(e);T||(d=setTimeout((function(){a.toolTip.showToolTip()}),500))}a.addEventListener(\"mouseenter\",w);a.addEventListener(\"mousemove\",w);a.addEventListener(\"mouseleave\",L);E&&this.showToolTip()});if(d){d.setVisibilityParams(n,l);d.setToolTipText(o)}})");
   }
 
   static WJavaScriptPreamble wtjs3() {

@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -206,7 +208,7 @@ public abstract class WWidget extends WObject {
    * the widget following CSS rules.
    *
    * <p>When the widget is not managed by a layout manager, the automatic (natural) size of a widget
-   * depends on whether they widget is a <i>block</i> or <i>inline</i> widget:
+   * depends on whether the widget is a <i>block</i> or <i>inline</i> widget:
    *
    * <ul>
    *   <li>a <i>block</i> widget takes by default the width of the parent, and the height that it
@@ -418,32 +420,73 @@ public abstract class WWidget extends WObject {
    * the right). It is aligned so that the top edges align (or the bottom edges if there is not
    * enough room below).
    *
+   * <p><code>adjustOrientations</code> allows to specify the axes on which the widget can adjust
+   * it&apos;s position if there is not enough room next to the other widget, breaking the previous
+   * rules if necessary. For example, if {@link Orientation#Vertical} flag of <code>
+   * adjustOrientations</code> is set, and part of the widget would be cut off by the top of the
+   * window, the widget would be move downward until the top of the widget is fully visible (or the
+   * widget reaches the bottom of the window). In that case, the widget would not be aligned with
+   * the other widget, in case <code>orientation</code> = {@link Orientation#Horizontal}, or would
+   * be displayed over the other widget, in case <code>orientation</code> = {@link
+   * Orientation#Vertical}.
+   *
    * <p>
    *
    * <p><i><b>Note: </b>This only works if JavaScript is available. </i>
    */
-  public void positionAt(WWidget widget, Orientation orientation) {
+  public void positionAt(
+      WWidget widget, Orientation orientation, EnumSet<Orientation> adjustOrientations) {
     if (this.isHidden()) {
       this.show();
     }
     String side = orientation == Orientation.Horizontal ? ".Horizontal" : ".Vertical";
+    String canAdjustX = adjustOrientations.contains(Orientation.Horizontal) ? "true" : "false";
+    String canAdjustY = adjustOrientations.contains(Orientation.Vertical) ? "true" : "false";
     this.doJavaScript(
-        "Wt4_10_4.positionAtWidget('"
+        "Wt4_12_1.positionAtWidget('"
             + this.getId()
             + "','"
             + widget.getId()
-            + "',Wt4_10_4"
+            + "',Wt4_12_1"
             + side
+            + ","
+            + "false,"
+            + canAdjustX
+            + ","
+            + canAdjustY
             + ");");
   }
   /**
    * Positions a widget next to another widget.
    *
-   * <p>Calls {@link #positionAt(WWidget widget, Orientation orientation) positionAt(widget,
-   * Orientation.Vertical)}
+   * <p>Calls {@link #positionAt(WWidget widget, Orientation orientation, EnumSet
+   * adjustOrientations) positionAt(widget, orientation, EnumSet.of(adjustOrientation,
+   * adjustOrientations))}
+   */
+  public final void positionAt(
+      WWidget widget,
+      Orientation orientation,
+      Orientation adjustOrientation,
+      Orientation... adjustOrientations) {
+    positionAt(widget, orientation, EnumSet.of(adjustOrientation, adjustOrientations));
+  }
+  /**
+   * Positions a widget next to another widget.
+   *
+   * <p>Calls {@link #positionAt(WWidget widget, Orientation orientation, EnumSet
+   * adjustOrientations) positionAt(widget, Orientation.Vertical, Orientation.AllOrientations)}
    */
   public final void positionAt(WWidget widget) {
-    positionAt(widget, Orientation.Vertical);
+    positionAt(widget, Orientation.Vertical, Orientation.AllOrientations);
+  }
+  /**
+   * Positions a widget next to another widget.
+   *
+   * <p>Calls {@link #positionAt(WWidget widget, Orientation orientation, EnumSet
+   * adjustOrientations) positionAt(widget, orientation, Orientation.AllOrientations)}
+   */
+  public final void positionAt(WWidget widget, Orientation orientation) {
+    positionAt(widget, orientation, Orientation.AllOrientations);
   }
   /** Sets the CSS line height for contained text. */
   public abstract void setLineHeight(final WLength height);
@@ -644,9 +687,18 @@ public abstract class WWidget extends WObject {
   /**
    * Sets whether the widget is disabled.
    *
-   * <p>Enables or disables the widget (including all its descendant widgets). setDisabled(false)
-   * will enable this widget and all descendant widgets that are not disabled. A widget is only
-   * enabled if it and all its ancestors in the widget tree are disabled.
+   * <p>The widget can be set to being disabled, or enabled. This state will also be propagated to
+   * all its descendants. Those descendants will only be &quot;visually&quot; made disabled, their
+   * actual {@link WWidget#isDisabled() isDisabled()} state will remain unaltered. All descendants
+   * will be assigned the disabled styleclass, which is dependent on the used Theme.
+   *
+   * <p>The {@link WWidget#isDisabled() isDisabled()} check will thus only return <code>true</code>
+   * in case setDisabled(true) has been called on the widget before. If the anscestor of a widget
+   * has been marked setDisabled(true), the widget&apos;s {@link WWidget#isDisabled() isDisabled()}
+   * state will remain <code>false</code>.
+   *
+   * <p>To check if a widget has been passively disabled, by one of its anscestors, use {@link
+   * WWidget#isEnabled() isEnabled()}.
    *
    * <p>Typically, a disabled form widget will not allow changing the value, and disabled widgets
    * will not react to mouse click events.
@@ -660,9 +712,9 @@ public abstract class WWidget extends WObject {
   /**
    * Returns whether the widget is set disabled.
    *
-   * <p>A widget that is not set disabled may still be disabled when one of its ancestor widgets is
-   * set disabled. Use {@link WWidget#isEnabled() isEnabled()} to find out whether a widget is
-   * enabled.
+   * <p>This method will return <code>true</code> if, and only if, it has been marked
+   * setDisabled(true) explicitly. It can still inherit the disabled state from one of its
+   * anscestors.
    *
    * <p>
    *
@@ -921,8 +973,8 @@ public abstract class WWidget extends WObject {
    * Refresh the widget.
    *
    * <p>The refresh method is invoked when the locale is changed using {@link
-   * WApplication#setLocale(Locale locale) WApplication#setLocale()} or when the user hit the
-   * refresh button.
+   * WApplication#setLocale(Locale locale, boolean doRefresh) WApplication#setLocale()} or when the
+   * user hit the refresh button.
    *
    * <p>The widget must actualize its contents in response.
    *
@@ -944,7 +996,7 @@ public abstract class WWidget extends WObject {
    * @see WWidget#isRendered()
    */
   public String getJsRef() {
-    return "Wt4_10_4.$('" + this.getId() + "')";
+    return "Wt4_12_1.$('" + this.getId() + "')";
   }
   /**
    * Sets an attribute value.
@@ -1421,10 +1473,16 @@ public abstract class WWidget extends WObject {
    * <p>By default all widgets are styled according to the chosen theme. Disabling the theme style
    * could be useful to completely customize the style of the widget outside of the theme.
    *
+   * <p>This function does, however, not always completely remove every style class added by JWt, as
+   * some of those are needed in order for the widget to function correctly. Additionally, Bootstrap
+   * 5 makes some changes to the default style of some widgets in the browser, like with buttons.
+   * These changes are not removed by this function.
+   *
    * <p>
    *
    * <p><i><b>Note: </b>This should be changed after the construction but before the rendering of
-   * the widget. </i>
+   * the widget or before the call to {@link WWidget#applyThemeStyles() applyThemeStyles()}
+   * (depending on what happens first). </i>
    */
   public abstract void setThemeStyleEnabled(boolean enabled);
   /**
@@ -1437,6 +1495,43 @@ public abstract class WWidget extends WObject {
    * @see WWidget#setThemeStyleEnabled(boolean enabled)
    */
   public abstract boolean isThemeStyleEnabled();
+  /**
+   * Schedules a theme style to be applied at the next render.
+   *
+   * <p>This schedules a theme style to be applied at the end of the next rendering of the widget,
+   * or when the next {@link WWidget#applyThemeStyles() applyThemeStyles()} is called (depending on
+   * what happens first).
+   *
+   * <p>
+   *
+   * @see WWidget#applyThemeStyles()
+   * @see WWidget#setThemeStyleEnabled(boolean enabled)
+   */
+  public void scheduleThemeStyleApply(WTheme theme, WWidget child, int role) {
+    this.themeStyles_.add(new WWidget.ThemeStyle(theme, child, role));
+  }
+  /**
+   * Apply the theme style scheduled.
+   *
+   * <p>This apllies the theme styles scheduled for the next render of this widget.
+   *
+   * <p>
+   *
+   * <p><i><b>Warning: </b>{@link WWidget#setThemeStyleEnabled(boolean enabled)
+   * setThemeStyleEnabled()} should not be called after using this method. </i>
+   *
+   * @see WWidget#scheduleThemeStyleApply(WTheme theme, WWidget child, int role)
+   * @see WWidget#setThemeStyleEnabled(boolean enabled)
+   */
+  public void applyThemeStyles() {
+    for (int i = 0; i < this.themeStyles_.size(); ++i) {
+      final WWidget.ThemeStyle ts = this.themeStyles_.get(i);
+      if (ts.oChild_ != null) {
+        ts.theme_.apply(this, ts.oChild_, ts.role_);
+      }
+    }
+    this.themeStyles_.clear();
+  }
 
   DomElement createSDomElement(WApplication app) {
     if (!this.needsToBeRendered()) {
@@ -1540,6 +1635,7 @@ public abstract class WWidget extends WObject {
     this.eventSignals_ = new LinkedList<AbstractEventSignal>();
     this.jsignals_ = new ArrayList<AbstractEventSignal>();
     this.parent_ = null;
+    this.themeStyles_ = new ArrayList<WWidget.ThemeStyle>();
     this.flags_.set(BIT_NEED_RERENDER);
     if (parentContainer != null) parentContainer.addWidget(this);
   }
@@ -1706,7 +1802,9 @@ public abstract class WWidget extends WObject {
    * rendering implementation until the latest moment possible. In that case you should make sure
    * you call the base implementation however.
    */
-  protected void render(EnumSet<RenderFlag> flags) {}
+  protected void render(EnumSet<RenderFlag> flags) {
+    this.applyThemeStyles();
+  }
   /**
    * Renders the widget.
    *
@@ -1847,6 +1945,22 @@ public abstract class WWidget extends WObject {
   private LinkedList<AbstractEventSignal> eventSignals_;
   List<AbstractEventSignal> jsignals_;
   WWidget parent_;
+
+  static class ThemeStyle {
+    private static Logger logger = LoggerFactory.getLogger(ThemeStyle.class);
+
+    public WTheme theme_;
+    public WWidget oChild_;
+    public int role_;
+
+    public ThemeStyle(WTheme theme, WWidget child, int role) {
+      this.theme_ = theme;
+      this.oChild_ = child;
+      this.role_ = role;
+    }
+  }
+
+  private List<WWidget.ThemeStyle> themeStyles_;
 
   private void setJsSize() {
     if (!this.getHeight().isAuto()

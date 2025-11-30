@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -23,10 +25,13 @@ class FlexLayoutImpl extends StdLayoutImpl {
 
   public FlexLayoutImpl(WLayout layout, final Grid grid) {
     super(layout);
+    this.flags_ = new BitSet();
     this.grid_ = grid;
     this.addedItems_ = new ArrayList<WLayoutItem>();
     this.removedItems_ = new ArrayList<String>();
+    this.childLayouts_ = new ArrayList<StdLayoutImpl>();
     this.elId_ = "";
+    this.canAdjustLayout_ = false;
     String THIS_JS = "js/FlexLayoutImpl.js";
     WApplication app = WApplication.getInstance();
     if (!app.isJavaScriptLoaded(THIS_JS)) {
@@ -56,13 +61,47 @@ class FlexLayoutImpl extends StdLayoutImpl {
     return total + (rowCount - 1) * this.grid_.verticalSpacing_;
   }
 
+  public int getMaximumWidth() {
+    final int colCount = this.grid_.columns_.size();
+    int total = 0;
+    for (int i = 0; i < colCount; ++i) {
+      int colMax = this.maximumWidthForColumn(i);
+      if (colMax == 0) {
+        return 0;
+      }
+      total += colMax;
+    }
+    return total + (colCount - 1) * this.grid_.horizontalSpacing_;
+  }
+
+  public int getMaximumHeight() {
+    final int rowCount = this.grid_.rows_.size();
+    int total = 0;
+    for (int i = 0; i < rowCount; ++i) {
+      int rowMax = this.maximumHeightForRow(i);
+      if (rowMax == 0) {
+        return 0;
+      }
+      total += rowMax;
+    }
+    return total + (rowCount - 1) * this.grid_.verticalSpacing_;
+  }
+
   public void itemAdded(WLayoutItem item) {
     this.addedItems_.add(item);
+    StdLayoutImpl child = getStdLayoutImpl(item);
+    if (child != null) {
+      this.childLayouts_.add(child);
+    }
     this.update();
   }
 
   public void itemRemoved(WLayoutItem item) {
     this.addedItems_.remove(item);
+    StdLayoutImpl child = getStdLayoutImpl(item);
+    if (child != null) {
+      this.childLayouts_.remove(child);
+    }
     this.removedItems_.add(getImpl(item).getId());
     this.update();
   }
@@ -70,7 +109,22 @@ class FlexLayoutImpl extends StdLayoutImpl {
   public void updateDom(final DomElement parent) {
     WApplication app = WApplication.getInstance();
     DomElement div = DomElement.getForUpdate(this.elId_, DomElementType.DIV);
+    if (this.flags_.get(BIT_OBJECT_NAME_CHANGED) && this.getLayout().getParentLayout() != null) {
+      if (this.getObjectName().length() != 0) {
+        div.setAttribute("data-object-name", this.getObjectName());
+      } else {
+        div.removeAttribute("data-object-name");
+      }
+      this.flags_.clear(BIT_OBJECT_NAME_CHANGED);
+    }
+    boolean skipLayoutAdjust = false;
     Orientation orientation = this.getOrientation();
+    if (this.grid_.items_.size() > 0) {
+      WWidget layoutParentWidget = this.item(orientation, 0).item_.getParentWidget();
+      if (layoutParentWidget != null && !layoutParentWidget.isEnabled()) {
+        skipLayoutAdjust = true;
+      }
+    }
     List<Integer> orderedInserts = new ArrayList<Integer>();
     for (int i = 0; i < this.addedItems_.size(); ++i) {
       orderedInserts.add(this.indexOf(this.addedItems_.get(i), orientation));
@@ -82,20 +136,28 @@ class FlexLayoutImpl extends StdLayoutImpl {
       DomElement el = this.createElement(orientation, pos, totalStretch, app);
       div.insertChildAt(el, pos);
     }
+    for (int i = 0; i < this.childLayouts_.size(); ++i) {
+      boolean justAdded = false;
+      WLayoutItem childItem = this.childLayouts_.get(i).getLayoutItem();
+      for (int j = 0; j < this.addedItems_.size() && !justAdded; ++j) {
+        justAdded = childItem == this.addedItems_.get(j);
+      }
+      if (!justAdded) {
+        this.childLayouts_.get(i).updateDom(div);
+      }
+    }
     this.addedItems_.clear();
     for (int i = 0; i < this.removedItems_.size(); ++i) {
-      div.callJavaScript("Wt4_10_4.remove('" + this.removedItems_.get(i) + "');", true);
+      div.callJavaScript("Wt4_12_1.remove('" + this.removedItems_.get(i) + "');", true);
     }
     this.removedItems_.clear();
-    div.callMethod("layout.adjust()");
-    parent.addChild(div);
-  }
-
-  public void update() {
-    WContainerWidget c = this.getContainer();
-    if (c != null) {
-      c.layoutChanged(false);
+    if (this.canAdjustLayout_) {
+      div.callMethod("layout.adjust()");
     }
+    if (!this.canAdjustLayout_ && skipLayoutAdjust) {
+      this.canAdjustLayout_ = true;
+    }
+    parent.addChild(div);
   }
 
   public DomElement createDomElement(
@@ -116,11 +178,11 @@ class FlexLayoutImpl extends StdLayoutImpl {
       margin[2] = this.getLayout().getContentsMargin(Side.Bottom);
       Orientation orientation = this.getOrientation();
       if (orientation == Orientation.Horizontal) {
-        margin[3] = Math.max(0, margin[3] - this.grid_.horizontalSpacing_ / 2);
-        margin[1] = Math.max(0, margin[1] - (this.grid_.horizontalSpacing_ + 1) / 2);
+        margin[3] = Math.max(0, margin[3]);
+        margin[1] = Math.max(0, margin[1]);
       } else {
-        margin[0] = Math.max(0, margin[0] - this.grid_.verticalSpacing_ / 2);
-        margin[2] = Math.max(0, margin[2] - (this.grid_.horizontalSpacing_ + 1) / 2);
+        margin[0] = Math.max(0, margin[0]);
+        margin[2] = Math.max(0, margin[2]);
       }
       ResizeSensor.applyIfNeeded(this.getContainer());
       result = parent;
@@ -130,6 +192,9 @@ class FlexLayoutImpl extends StdLayoutImpl {
       this.elId_ = this.getId();
       result.setId(this.elId_);
       result.setProperty(Property.StyleDisplay, this.getStyleDisplay());
+      if (this.getObjectName().length() != 0) {
+        result.setAttribute("data-object-name", this.getObjectName());
+      }
     }
     if (margin[0] != 0 || margin[1] != 0 || margin[2] != 0 || margin[3] != 0) {
       StringBuilder paddingProperty = new StringBuilder();
@@ -153,7 +218,7 @@ class FlexLayoutImpl extends StdLayoutImpl {
       result.addChild(el);
     }
     StringBuilder js = new StringBuilder();
-    js.append("layout=new Wt4_10_4.FlexLayout(")
+    js.append("layout=new Wt4_12_1.FlexLayout(")
         .append(app.getJavaScriptClass())
         .append(",'")
         .append(this.elId_)
@@ -170,10 +235,22 @@ class FlexLayoutImpl extends StdLayoutImpl {
     return false;
   }
 
+  public void setObjectName(final String name) {
+    if (!this.getObjectName().equals(name)) {
+      super.setObjectName(name);
+      this.flags_.set(BIT_OBJECT_NAME_CHANGED);
+      this.update();
+    }
+  }
+
+  private static final int BIT_OBJECT_NAME_CHANGED = 0;
+  private BitSet flags_;
   private final Grid grid_;
   private List<WLayoutItem> addedItems_;
   private List<String> removedItems_;
+  private List<StdLayoutImpl> childLayouts_;
   private String elId_;
+  private boolean canAdjustLayout_;
 
   private int minimumHeightForRow(int row) {
     int minHeight = 0;
@@ -197,6 +274,54 @@ class FlexLayoutImpl extends StdLayoutImpl {
       }
     }
     return minWidth;
+  }
+
+  private int maximumHeightForRow(int row) {
+    int maxHeight = Integer.MAX_VALUE;
+    boolean isConstrained = false;
+    final int colCount = this.grid_.columns_.size();
+    for (int j = 0; j < colCount; ++j) {
+      WLayoutItem item = this.grid_.items_.get(row).get(j).item_;
+      if (item != null) {
+        int itemMaxHeight = getImpl(item).getMaximumHeight();
+        if (itemMaxHeight > 0) {
+          if (isConstrained) {
+            maxHeight = Math.min(maxHeight, itemMaxHeight);
+          } else {
+            maxHeight = itemMaxHeight;
+            isConstrained = true;
+          }
+        }
+      }
+    }
+    if (!isConstrained) {
+      maxHeight = 0;
+    }
+    return maxHeight;
+  }
+
+  private int maximumWidthForColumn(int col) {
+    int maxWidth = Integer.MAX_VALUE;
+    boolean isConstrained = false;
+    final int rowCount = this.grid_.rows_.size();
+    for (int i = 0; i < rowCount; ++i) {
+      WLayoutItem item = this.grid_.items_.get(i).get(col).item_;
+      if (item != null) {
+        int itemMaxWidth = getImpl(item).getMaximumWidth();
+        if (itemMaxWidth > 0) {
+          if (isConstrained) {
+            maxWidth = Math.min(maxWidth, itemMaxWidth);
+          } else {
+            maxWidth = itemMaxWidth;
+            isConstrained = true;
+          }
+        }
+      }
+    }
+    if (!isConstrained) {
+      maxWidth = 0;
+    }
+    return maxWidth;
   }
 
   private DomElement createElement(
@@ -320,20 +445,36 @@ class FlexLayoutImpl extends StdLayoutImpl {
     }
     switch (this.getDirection()) {
       case LeftToRight:
-        m[3] += (this.grid_.horizontalSpacing_ + 1) / 2;
-        m[1] += this.grid_.horizontalSpacing_ / 2;
+        if (index != 0) {
+          m[3] += (this.grid_.horizontalSpacing_ + 1) / 2;
+        }
+        if (index != this.count(orientation) - 1) {
+          m[1] += this.grid_.horizontalSpacing_ / 2;
+        }
         break;
       case RightToLeft:
-        m[1] += (this.grid_.horizontalSpacing_ + 1) / 2;
-        m[3] += this.grid_.horizontalSpacing_ / 2;
+        if (index != 0) {
+          m[1] += (this.grid_.horizontalSpacing_ + 1) / 2;
+        }
+        if (index != this.count(orientation) - 1) {
+          m[3] += this.grid_.horizontalSpacing_ / 2;
+        }
         break;
       case TopToBottom:
-        m[0] += (this.grid_.horizontalSpacing_ + 1) / 2;
-        m[2] += this.grid_.horizontalSpacing_ / 2;
+        if (index != 0) {
+          m[0] += (this.grid_.horizontalSpacing_ + 1) / 2;
+        }
+        if (index != this.count(orientation) - 1) {
+          m[2] += this.grid_.horizontalSpacing_ / 2;
+        }
         break;
       case BottomToTop:
-        m[2] += (this.grid_.horizontalSpacing_ + 1) / 2;
-        m[0] += this.grid_.horizontalSpacing_ / 2;
+        if (index != 0) {
+          m[2] += (this.grid_.horizontalSpacing_ + 1) / 2;
+        }
+        if (index != this.count(orientation) - 1) {
+          m[0] += this.grid_.horizontalSpacing_ / 2;
+        }
         break;
     }
     if (m[0] != 0 || m[1] != 0 || m[2] != 0 || m[3] != 0) {
@@ -416,6 +557,14 @@ class FlexLayoutImpl extends StdLayoutImpl {
       }
     }
     return totalStretch;
+  }
+
+  private static StdLayoutImpl getStdLayoutImpl(WLayoutItem item) {
+    WLayout layout = ObjectUtils.cast(item, WLayout.class);
+    if (layout != null) {
+      return ObjectUtils.cast(layout.getImpl(), StdLayoutImpl.class);
+    }
+    return null;
   }
 
   private Grid.Item item(Orientation orientation, int i) {

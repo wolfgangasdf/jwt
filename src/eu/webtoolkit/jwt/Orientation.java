@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -27,4 +29,7 @@ public enum Orientation {
   public int getValue() {
     return ordinal();
   }
+
+  public static final EnumSet<Orientation> AllOrientations =
+      EnumSet.of(Orientation.Horizontal, Orientation.Vertical);
 }

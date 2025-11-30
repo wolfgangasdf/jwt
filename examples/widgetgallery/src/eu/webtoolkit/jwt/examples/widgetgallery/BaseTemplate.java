@@ -6,6 +6,8 @@
 package eu.webtoolkit.jwt.examples.widgetgallery;
 
 import eu.webtoolkit.jwt.*;
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -26,6 +28,7 @@ class BaseTemplate extends WTemplate {
     super(tr(trKey), (WContainerWidget) null);
     this.setInternalPathEncoding(true);
     this.addFunction("tr", Functions.tr);
+    this.addFunction("block", Functions.block);
     this.setCondition("if:cpp", false);
     this.setCondition("if:java", true);
     if (parentContainer != null) parentContainer.addWidget(this);

@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -214,6 +216,8 @@ public class WMenuItem extends WContainerWidget {
         this.text_.setBuddy(this.checkBox_);
         WApplication app = WApplication.getInstance();
         app.getTheme().apply(this, this.checkBox_, WidgetThemeRole.MenuItemCheckBox);
+        this.signalsConnected_ = false;
+        this.repaint();
       } else {
         {
           WWidget toRemove = WidgetUtils.remove(this.getAnchor(), this.checkBox_);
@@ -663,18 +667,23 @@ public class WMenuItem extends WContainerWidget {
    * be stateless as well.
    */
   public void renderSelected(boolean selected) {
-    WApplication app = WApplication.getInstance();
-    String active = app.getTheme().getActiveClass();
-    WBootstrap5Theme bs5Theme = ObjectUtils.cast(app.getTheme(), WBootstrap5Theme.class);
-    if (active.equals("Wt-selected")) {
-      this.removeStyleClass(!selected ? "itemselected" : "item", true);
-      this.addStyleClass(selected ? "itemselected" : "item", true);
-    } else {
-      if (bs5Theme != null) {
-        WAnchor a = this.getAnchor();
-        a.toggleStyleClass(active, selected, true);
+    this.selected_ = selected;
+    if (this.setThemeStyle_) {
+      WApplication app = WApplication.getInstance();
+      String active = app.getTheme().getActiveClass();
+      WBootstrap5Theme bs5Theme = ObjectUtils.cast(app.getTheme(), WBootstrap5Theme.class);
+      if (active.equals("Wt-selected")) {
+        this.removeStyleClass(!selected ? "itemselected" : "item", true);
+        this.addStyleClass(selected ? "itemselected" : "item", true);
+      } else {
+        if (bs5Theme != null) {
+          WAnchor a = this.getAnchor();
+          if (a != null) {
+            a.toggleStyleClass(active, selected, true);
+          }
+        }
+        this.toggleStyleClass(active, selected, true);
       }
-      this.toggleStyleClass(active, selected, true);
     }
   }
 
@@ -718,6 +727,10 @@ public class WMenuItem extends WContainerWidget {
   }
 
   protected void render(EnumSet<RenderFlag> flags) {
+    if (this.isThemeStyleEnabled() && !this.signalsConnected_) {
+      this.setThemeStyle_ = true;
+      this.renderSelected(this.selected_);
+    }
     this.connectSignals();
     super.render(flags);
   }
@@ -743,7 +756,7 @@ public class WMenuItem extends WContainerWidget {
     }
   }
 
-  private ContentLoading loadPolicy_;
+  ContentLoading loadPolicy_;
   private WWidget uContents_;
   private WWidget oContents_;
   private WContainerWidget uContentsContainer_;
@@ -758,11 +771,15 @@ public class WMenuItem extends WContainerWidget {
   private boolean selectable_;
   private boolean signalsConnected_;
   private boolean customLink_;
+  private boolean selectConnected_;
+  private boolean menuItemCheckedConnected_;
   private Signal1<WMenuItem> triggered_;
   private String pathComponent_;
   private boolean customPathComponent_;
   private boolean internalPathEnabled_;
   private boolean closeable_;
+  private boolean selected_;
+  private boolean setThemeStyle_;
 
   private void create(
       final String iconPath, final CharSequence text, WWidget contents, ContentLoading policy) {
@@ -772,6 +789,10 @@ public class WMenuItem extends WContainerWidget {
     this.internalPathEnabled_ = true;
     this.closeable_ = false;
     this.selectable_ = true;
+    this.selectConnected_ = false;
+    this.menuItemCheckedConnected_ = false;
+    this.selected_ = false;
+    this.setThemeStyle_ = false;
     this.text_ = null;
     this.icon_ = null;
     this.checkBox_ = null;
@@ -811,7 +832,7 @@ public class WMenuItem extends WContainerWidget {
     }
   }
 
-  private boolean isContentsLoaded() {
+  boolean isContentsLoaded() {
     return this.oContents_ != null && !(this.uContents_ != null);
   }
 
@@ -896,17 +917,30 @@ public class WMenuItem extends WContainerWidget {
                 WMenuItem.this.selectNotLoaded();
               });
         } else {
-          as.addListener(
-              this,
-              () -> {
-                WMenuItem.this.selectVisual();
-              });
-          if (!selectFromCheckbox) {
+          if (!this.menuItemCheckedConnected_ && !this.selectConnected_) {
+            as.addListener(
+                this,
+                () -> {
+                  WMenuItem.this.selectVisual();
+                });
+          }
+          if (!selectFromCheckbox && !this.selectConnected_) {
             as.addListener(
                 this,
                 () -> {
                   WMenuItem.this.select();
                 });
+            this.selectConnected_ = true;
+          } else {
+            if (selectFromCheckbox && !this.menuItemCheckedConnected_) {
+              a.clicked()
+                  .addListener(
+                      this,
+                      (WMouseEvent e1) -> {
+                        WMenuItem.this.menuItemCheckedPropagate();
+                      });
+              this.menuItemCheckedConnected_ = true;
+            }
           }
         }
       }
@@ -930,6 +964,16 @@ public class WMenuItem extends WContainerWidget {
   private void setUnCheckBox() {
     this.setChecked(false);
     this.select();
+  }
+
+  private void menuItemCheckedPropagate() {
+    if (this.isCheckable()) {
+      if (this.isChecked()) {
+        this.checkBox_.unChecked().trigger();
+      } else {
+        this.checkBox_.checked().trigger();
+      }
+    }
   }
 
   WWidget takeContentsForStack() {
@@ -965,7 +1009,20 @@ public class WMenuItem extends WContainerWidget {
       if (!(this.uContents_ != null)) {
         this.uContents_ = this.oContentsContainer_.removeWidget(this.oContents_);
       }
-      this.oContentsContainer_ = (WContainerWidget) null;
+      WWidget realWidget = widget;
+      WContainerWidget uContentsContainer = ObjectUtils.cast(realWidget, WContainerWidget.class);
+      if (uContentsContainer != null) {
+        this.uContentsContainer_ = uContentsContainer;
+        this.oContentsContainer_ = this.uContentsContainer_;
+      } else {
+        if (realWidget != null) realWidget.remove();
+        this.oContentsContainer_ = (WContainerWidget) null;
+        logger.error(
+            new StringWriter()
+                .append(
+                    "returnContentsInStack: widget is not oContentsContainer_. This should not happen.")
+                .toString());
+      }
     } else {
       this.uContents_ = widget;
     }

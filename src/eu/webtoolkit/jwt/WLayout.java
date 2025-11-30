@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -250,6 +252,14 @@ public abstract class WLayout extends WObject implements WLayoutItem {
 
   public boolean isImplementationIsFlexLayout() {
     return false;
+  }
+
+  public void setObjectName(final String name) {
+    StdLayoutImpl stdImpl = ObjectUtils.cast(this.impl_, StdLayoutImpl.class);
+    if (stdImpl != null) {
+      stdImpl.setObjectName(name);
+    }
+    super.setObjectName(name);
   }
   /** Create a layout. */
   protected WLayout() {

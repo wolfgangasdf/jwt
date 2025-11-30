@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -18,7 +20,8 @@ import javax.servlet.http.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class DataUri {
+/** Internal class. Necessary for wt-port. */
+public class DataUri {
   private static Logger logger = LoggerFactory.getLogger(DataUri.class);
 
   public DataUri(final String uriString) {

@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -249,7 +251,7 @@ public class WLink {
           if (app.getEnvironment().hasAjax()) {
             relativeUrl = app.getBookmarkUrl(this.getInternalPath());
           } else {
-            if (app.getEnvironment().agentIsSpiderBot()) {
+            if (app.getEnvironment().isTreatLikeBot()) {
               relativeUrl = app.getBookmarkUrl(this.getInternalPath());
             } else {
               relativeUrl = app.getSession().getMostRelativeUrl(this.getInternalPath());

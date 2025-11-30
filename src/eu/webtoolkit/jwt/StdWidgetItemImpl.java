@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -29,25 +31,25 @@ class StdWidgetItemImpl extends StdLayoutItemImpl implements WWidgetItemImpl {
   public static String getChildrenResizeJS() {
     WApplication app = WApplication.getInstance();
     app.loadJavaScript("js/WtResize.js", wtjs10());
-    return "Wt4_10_4.ChildrenResize";
+    return "Wt4_12_1.ChildrenResize";
   }
 
   public static String getChildrenGetPSJS() {
     WApplication app = WApplication.getInstance();
     app.loadJavaScript("js/WtResize.js", wtjs11());
-    return "Wt4_10_4.ChildrenGetPS";
+    return "Wt4_12_1.ChildrenGetPS";
   }
 
   public static String getSecondResizeJS() {
     WApplication app = WApplication.getInstance();
     app.loadJavaScript("js/WtResize.js", wtjs12());
-    return "Wt4_10_4.LastResize";
+    return "Wt4_12_1.LastResize";
   }
 
   public static String getSecondGetPSJS() {
     WApplication app = WApplication.getInstance();
     app.loadJavaScript("js/WtResize.js", wtjs13());
-    return "Wt4_10_4.LastGetPS";
+    return "Wt4_12_1.LastGetPS";
   }
 
   public String getId() {
@@ -67,6 +69,22 @@ class StdWidgetItemImpl extends StdLayoutItemImpl implements WWidgetItemImpl {
       return 0;
     } else {
       return (int) this.item_.getWidget().getMinimumWidth().toPixels();
+    }
+  }
+
+  public int getMaximumHeight() {
+    if (this.item_.getWidget().isHidden()) {
+      return 0;
+    } else {
+      return (int) this.item_.getWidget().getMaximumHeight().toPixels();
+    }
+  }
+
+  public int getMaximumWidth() {
+    if (this.item_.getWidget().isHidden()) {
+      return 0;
+    } else {
+      return (int) this.item_.getWidget().getMaximumWidth().toPixels();
     }
   }
 

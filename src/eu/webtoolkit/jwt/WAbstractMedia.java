@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -264,7 +266,7 @@ public abstract class WAbstractMedia extends WInteractWidget {
     if (this.mediaId_.length() == 0) {
       return "null";
     } else {
-      return "Wt4_10_4.getElement('" + this.mediaId_ + "')";
+      return "Wt4_12_1.getElement('" + this.mediaId_ + "')";
     }
   }
 
@@ -275,7 +277,7 @@ public abstract class WAbstractMedia extends WInteractWidget {
       if (this.sourcesChanged_) {
         for (int i = 0; i < this.sourcesRendered_; ++i) {
           media.callJavaScript(
-              "Wt4_10_4.remove('" + this.mediaId_ + "s" + String.valueOf(i) + "');", true);
+              "Wt4_12_1.remove('" + this.mediaId_ + "s" + String.valueOf(i) + "');", true);
         }
         this.sourcesRendered_ = 0;
         for (int i = 0; i < this.sources_.size(); ++i) {
@@ -374,9 +376,28 @@ public abstract class WAbstractMedia extends WInteractWidget {
 
   void updateMediaDom(final DomElement element, boolean all) {
     if (all && this.alternative_ != null) {
-      element.setAttribute(
-          "onerror",
-          "if(event.target.error && event.target.error.code==event.target.error.MEDIA_ERR_SRC_NOT_SUPPORTED){while (this.hasChildNodes())if (Wt4_10_4.hasTag(this.firstChild,'SOURCE')){this.removeChild(this.firstChild);}else{this.parentNode.insertBefore(this.firstChild, this);}this.style.display= 'none';}");
+      StringBuilder errorJS = new StringBuilder();
+      errorJS
+          .append("Wt4_12_1")
+          .append(".$('")
+          .append(this.getId())
+          .append("').onerror = ")
+          .append("function() {")
+          .append("if(event.target.error && event.target.error.code==")
+          .append("event.target.error.MEDIA_ERR_SRC_NOT_SUPPORTED) {")
+          .append("while (this.hasChildNodes()) {")
+          .append("if (")
+          .append("Wt4_12_1")
+          .append(".hasTag(this.firstChild,'SOURCE')) {")
+          .append("this.removeChild(this.firstChild);")
+          .append("} else {")
+          .append("this.parentNode.insertBefore(this.firstChild, this);")
+          .append("}")
+          .append("}")
+          .append("this.style.display= 'none';")
+          .append("}")
+          .append("};");
+      WApplication.getInstance().doJavaScript(errorJS.toString());
     }
     if (all || this.flagsChanged_) {
       if (!all || this.flags_.contains(PlayerOption.Controls)) {
@@ -500,11 +521,35 @@ public abstract class WAbstractMedia extends WInteractWidget {
       element.setAttribute("media", source.media);
     }
     if (isLast && this.alternative_ != null) {
-      element.setAttribute(
-          "onerror",
-          "var media = this.parentNode;if(media){while (media && media.children.length)if (Wt4_10_4.hasTag(media.firstChild,'SOURCE')){media.removeChild(media.firstChild);}else{media.parentNode.insertBefore(media.firstChild, media);}media.style.display= 'none';}");
+      StringBuilder errorJS = new StringBuilder();
+      errorJS
+          .append("Wt4_12_1")
+          .append(".$('")
+          .append(element.getId())
+          .append("').onerror = ")
+          .append("function() {")
+          .append("var media = this.parentNode;")
+          .append("if(media) {")
+          .append("while (media && media.children.length)")
+          .append("if (")
+          .append("Wt4_12_1")
+          .append(".hasTag(media.firstChild,'SOURCE')) {")
+          .append("media.removeChild(media.firstChild);")
+          .append("} else {")
+          .append("media.parentNode.insertBefore(media.firstChild, media);")
+          .append("}")
+          .append("media.style.display= 'none';")
+          .append("};")
+          .append("};");
+      WApplication.getInstance().doJavaScript(errorJS.toString());
     } else {
-      element.setAttribute("onerror", "");
+      StringBuilder errorJS = new StringBuilder();
+      errorJS
+          .append("Wt4_12_1")
+          .append(".$('")
+          .append(element.getId())
+          .append("').onerror = null;");
+      WApplication.getInstance().doJavaScript(errorJS.toString());
     }
   }
 
@@ -535,7 +580,7 @@ public abstract class WAbstractMedia extends WInteractWidget {
       app.loadJavaScript("js/WAbstractMedia.js", wtjs1());
       this.setJavaScriptMember(
           " WAbstractMedia",
-          "new Wt4_10_4.WAbstractMedia(" + app.getJavaScriptClass() + "," + this.getJsRef() + ");");
+          "new Wt4_12_1.WAbstractMedia(" + app.getJavaScriptClass() + "," + this.getJsRef() + ");");
     }
   }
 

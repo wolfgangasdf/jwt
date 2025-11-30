@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -767,7 +769,7 @@ class WebSession {
     if (internalPath.length() == 0 || internalPath.equals("/")) {
       if (baseUrl.length() == 0) {
         if (this.applicationName_.length() == 0) {
-          return ".";
+          return "";
         } else {
           return this.applicationName_;
         }
@@ -789,7 +791,7 @@ class WebSession {
 
   public String appendSessionQuery(final String url) {
     String result = url;
-    if (this.env_.agentIsSpiderBot()) {
+    if (this.env_.isTreatLikeBot()) {
       return result;
     }
     int questionPos = result.indexOf('?');
@@ -960,7 +962,11 @@ class WebSession {
               }
             }
             if (url.length() == 0) {
-              return rel + this.applicationName_;
+              if (this.applicationName_.length() == 0 && rel.length() == 0) {
+                return "#";
+              } else {
+                return rel + this.applicationName_;
+              }
             } else {
               return rel + url;
             }
@@ -1034,7 +1040,6 @@ class WebSession {
     if (event.impl_.renderOnly || !(handler.getRequest() != null)) {
       return EventType.Other;
     }
-    String requestE = request.getParameter("request");
     String pageIdE = handler.getRequest().getParameter("pageId");
     if (pageIdE != null && !pageIdE.equals(String.valueOf(this.renderer_.getPageId()))) {
       return EventType.Other;
@@ -1447,7 +1452,7 @@ class WebSession {
                         }
                       }
                       boolean forcePlain =
-                          this.env_.agentIsSpiderBot() || !this.env_.agentSupportsAjax();
+                          this.env_.isTreatLikeBot() || !this.env_.agentSupportsAjax();
                       this.progressiveBoot_ =
                           !forcePlain && conf.progressiveBootstrap(this.env_.getInternalPath());
                       if (forcePlain || this.progressiveBoot_) {
@@ -1458,19 +1463,29 @@ class WebSession {
                         if (this.env_.agentIsSpiderBot()) {
                           this.kill();
                         } else {
-                          if (this.controller_.limitPlainHtmlSessions()) {
+                          if (this.env_.isLikelyBotGetRequest()) {
                             logger.warn(
                                 new StringWriter()
                                     .append("secure:")
-                                    .append("DoS: plain HTML sessions being limited")
+                                    .append(
+                                        "terminating session for suspicious initial GET request (containing session ID)")
                                     .toString());
-                            if (forcePlain) {
-                              this.kill();
-                            } else {
-                              this.setState(WebSession.State.Loaded, conf.getBootstrapTimeout());
-                            }
+                            this.kill();
                           } else {
-                            this.setLoaded();
+                            if (this.controller_.limitPlainHtmlSessions()) {
+                              logger.warn(
+                                  new StringWriter()
+                                      .append("secure:")
+                                      .append("DoS: plain HTML sessions being limited")
+                                      .toString());
+                              if (forcePlain) {
+                                this.kill();
+                              } else {
+                                this.setState(WebSession.State.Loaded, conf.getBootstrapTimeout());
+                              }
+                            } else {
+                              this.setLoaded();
+                            }
                           }
                         }
                       } else {
@@ -1704,7 +1719,7 @@ class WebSession {
     this.setState(WebSession.State.Loaded, this.controller_.getConfiguration().getSessionTimeout());
     if (wasSuspended) {
       if (this.env_.hasAjax() && this.controller_.getConfiguration().reloadIsNewSession()) {
-        this.app_.doJavaScript("Wt4_10_4.history.removeSessionId()");
+        this.app_.doJavaScript("Wt4_12_1.history.removeSessionId()");
         this.sessionIdInUrl_ = false;
       }
       this.app_.unsuspended().trigger();
@@ -2100,7 +2115,7 @@ class WebSession {
               String hashE = request.getParameter(se + "_");
               if (hashE != null) {
                 this.changeInternalPath(hashE, handler.getResponse());
-                this.app_.doJavaScript("Wt4_10_4.scrollHistory();");
+                this.app_.doJavaScript("Wt4_12_1.scrollHistory();");
               } else {
                 this.changeInternalPath("", handler.getResponse());
               }
@@ -2203,7 +2218,7 @@ class WebSession {
   }
 
   private void init(final WebRequest request) {
-    this.env_.init(request);
+    this.env_.init(request, this.sessionId_);
     String hashE = request.getParameter("_");
     this.absoluteBaseUrl_ =
         this.env_.getUrlScheme() + "://" + this.env_.getHostName() + this.basePath_;

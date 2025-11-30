@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -67,7 +69,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>
  *
- * @see WApplication#setLocale(Locale locale)
+ * @see WApplication#setLocale(Locale locale, boolean doRefresh)
  */
 public class WText extends WInteractWidget {
   private static Logger logger = LoggerFactory.getLogger(WText.class);

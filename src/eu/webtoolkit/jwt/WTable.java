@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -457,7 +459,7 @@ public class WTable extends WInteractWidget {
   }
 
   protected DomElement createDomElement(WApplication app) {
-    boolean withIds = !app.getEnvironment().agentIsSpiderBot();
+    boolean withIds = !app.getEnvironment().isTreatLikeBot();
     DomElement table = DomElement.createNew(this.getDomElementType());
     this.setId(table, app);
     DomElement thead = null;

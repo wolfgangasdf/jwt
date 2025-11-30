@@ -5,6 +5,8 @@
  */
 package eu.webtoolkit.jwt;
 
+import eu.webtoolkit.jwt.auth.*;
+import eu.webtoolkit.jwt.auth.mfa.*;
 import eu.webtoolkit.jwt.chart.*;
 import eu.webtoolkit.jwt.servlet.*;
 import eu.webtoolkit.jwt.utils.*;
@@ -284,6 +286,8 @@ public class WContainerWidget extends WInteractWidget {
    */
   public void clear() {
     this.layout_ = null;
+    this.flags_.set(BIT_LAYOUT_NEEDS_RERENDER);
+    this.repaint();
     while (!this.children_.isEmpty()) {
       {
         WWidget toRemove = this.removeWidget(this.children_.get(this.children_.size() - 1));
@@ -682,6 +686,8 @@ public class WContainerWidget extends WInteractWidget {
     if (addChildren) {
       this.createDomChildren(result, app);
     }
+    this.flags_.clear(BIT_LAYOUT_NEEDS_RERENDER);
+    this.flags_.clear(BIT_LAYOUT_NEEDS_UPDATE);
     return result;
   }
 
@@ -859,7 +865,6 @@ public class WContainerWidget extends WInteractWidget {
       }
       this.flags_.clear(BIT_PADDINGS_CHANGED);
     }
-    super.updateDom(element, all);
     if (this.flags_.get(BIT_OVERFLOW_CHANGED)
         || all
             && this.overflow_ != null
@@ -878,6 +883,7 @@ public class WContainerWidget extends WInteractWidget {
         }
       }
     }
+    super.updateDom(element, all);
   }
 
   void propagateRenderOk(boolean deep) {
